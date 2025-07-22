@@ -340,7 +340,7 @@ class ETHGridBacktestApp {
                     <p><strong>API端点：</strong>${dataInfo.dataIntegrity.apiEndpoint}</p>
                     <p><strong>时间范围：</strong>${dataInfo.startDate} 至 ${dataInfo.endDate}</p>
                     <p><strong>数据点数：</strong>${dataInfo.totalPoints} 条真实K线数据</p>
-                    <p><strong>价格区间：</strong>$${dataInfo.priceRange.min.toFixed(2)} - $${dataInfo.priceRange.max.toFixed(2)}</p>
+                    <p><strong>价格区间：</strong>$${dataInfo.priceRange.start.toFixed(2)} - $${dataInfo.priceRange.end.toFixed(2)}</p>
                     <p><strong>手续费率：</strong>0.008% (已计入成本)</p>
                     <p><strong>获取时间：</strong>${new Date(dataInfo.dataIntegrity.requestTime).toLocaleString()}</p>
                 </div>

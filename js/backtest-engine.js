@@ -57,8 +57,8 @@ class BacktestEngine {
                     startDate: new Date(priceData[0].timestamp).toLocaleDateString(),
                     endDate: new Date(priceData[priceData.length - 1].timestamp).toLocaleDateString(),
                     priceRange: {
-                        min: Math.min(...priceData.map(d => d.low)),
-                        max: Math.max(...priceData.map(d => d.high))
+                        start: priceData[0].close,  // 回测起始价格
+                        end: priceData[priceData.length - 1].close  // 回测结束价格
                     },
                     dataSource: '币安合约API真实数据',
                     timeframe: config.timeframe,
