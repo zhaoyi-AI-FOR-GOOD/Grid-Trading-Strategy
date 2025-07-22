@@ -179,23 +179,32 @@ class GridStrategy {
      * @returns {boolean}
      */
     shouldBuy(currentPrice, gridPrice, position) {
+        // 🐛 添加调试日志
+        const lowerBound = this.gridLevels[0];
+        const upperBound = this.gridLevels[this.gridLevels.length - 1];
+        
         // 基本条件检查
         if (position.status !== 'waiting' || this.balance < position.allocated) {
             return false;
         }
         
-        // 检查价格是否在网格范围内
-        const lowerBound = this.gridLevels[0];
-        const upperBound = this.gridLevels[this.gridLevels.length - 1];
-        
+        // 检查价格是否在网格范围内 - 关键边界检查！
         if (currentPrice < lowerBound || currentPrice > upperBound) {
+            if (currentPrice > upperBound) {
+                console.log(`🚨 shouldBuy: 价格$${currentPrice.toFixed(2)}超出上边界$${upperBound.toFixed(2)}，拒绝买入`);
+            }
             return false;
         }
         
         // 🔧 修复关键逻辑：只有当价格下跌到网格价位以下时才买入
-        // 这确保了"低买"的原则，避免在基准价格时立即买入
-        const tolerance = gridPrice * 0.002; // 0.2% 容差，防止价格波动误触发
-        return currentPrice < gridPrice - tolerance;
+        const tolerance = gridPrice * 0.002;
+        const shouldBuyResult = currentPrice < gridPrice - tolerance;
+        
+        if (shouldBuyResult) {
+            console.log(`✅ shouldBuy: 价格$${currentPrice.toFixed(2)} < 网格$${gridPrice.toFixed(2)}, 可以买入`);
+        }
+        
+        return shouldBuyResult;
     }
 
     /**
@@ -215,8 +224,9 @@ class GridStrategy {
         const lowerBound = this.gridLevels[0];
         const upperBound = this.gridLevels[this.gridLevels.length - 1];
         
-        // 如果价格突破上边界，立即卖出所有持仓
+        // 如果价格突破上边界，立即卖出所有持仓 - 关键边界处理！
         if (currentPrice > upperBound) {
+            console.log(`🚨 shouldSell: 价格$${currentPrice.toFixed(2)}突破上边界$${upperBound.toFixed(2)}，强制卖出网格${gridIndex}`);
             return true;
         }
         
@@ -226,14 +236,18 @@ class GridStrategy {
         }
         
         // 🔧 修复关键逻辑：基于买入价格设置合理的卖出目标
-        // 使用更保守的利润目标，避免过高收益
         const gridSpacing = (upperBound - lowerBound) / (this.gridLevels.length - 1);
-        const profitTarget = gridSpacing * 0.3; // 使用30%的网格间距作为利润目标，更加保守
+        const profitTarget = gridSpacing * 0.3;
         const sellPrice = position.buyPrice + profitTarget;
         
-        // 添加小幅容差防止价格波动
         const tolerance = sellPrice * 0.002;
-        return currentPrice >= sellPrice - tolerance;
+        const shouldSellResult = currentPrice >= sellPrice - tolerance;
+        
+        if (shouldSellResult) {
+            console.log(`✅ shouldSell: 价格$${currentPrice.toFixed(2)} >= 目标$${sellPrice.toFixed(2)}, 网格${gridIndex}可以卖出`);
+        }
+        
+        return shouldSellResult;
     }
 
     /**
@@ -347,23 +361,38 @@ class GridStrategy {
      */
     calculateTotalValue(currentPrice) {
         let netPositionValue = 0;
+        let totalPositions = 0;
+        
+        // 🐛 添加调试：检查网格边界
+        const upperBound = this.gridLevels[this.gridLevels.length - 1];
+        const isAboveGrid = currentPrice > upperBound;
         
         this.positions.forEach(position => {
             if (position.status === 'bought' && position.quantity > 0) {
-                const currentValue = position.quantity * currentPrice; // 当前市值
+                totalPositions++;
+                const currentValue = position.quantity * currentPrice;
+                
+                // 🚨 关键调试：如果价格超出网格边界但还有持仓，这就是问题所在！
+                if (isAboveGrid) {
+                    console.log(`🚨 calculateTotalValue警告: 价格$${currentPrice.toFixed(2)}超出网格上边界$${upperBound.toFixed(2)}, 但网格${position.gridIndex}仍有${position.quantity.toFixed(6)}ETH持仓！`);
+                    console.log(`   持仓价值: $${currentValue.toLocaleString()}, 买入价: $${position.buyPrice}`);
+                }
                 
                 // 杠杆交易中，需要考虑借入资金的成本
                 if (this.config.leverage > 1) {
-                    // 借入金额 = 持仓成本 × (杠杆-1) / 杠杆
                     const positionCost = position.quantity * position.buyPrice;
                     const borrowedAmount = positionCost * (this.config.leverage - 1) / this.config.leverage;
                     netPositionValue += (currentValue - borrowedAmount);
                 } else {
-                    // 1倍杠杆时无借入资金
                     netPositionValue += currentValue;
                 }
             }
         });
+        
+        // 🐛 调试日志：总结持仓状态
+        if (isAboveGrid && totalPositions > 0) {
+            console.log(`🚨 异常状态总结: 价格突破网格但仍有${totalPositions}个持仓，总价值$${netPositionValue.toLocaleString()}`);
+        }
         
         return this.balance + netPositionValue;
     }
