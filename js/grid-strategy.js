@@ -402,6 +402,11 @@ class GridStrategy {
         // 总利润计算
         const totalProfit = finalValue - initialValue;
         
+        // ETH现货收益率计算
+        const startPrice = equity[0].price; // 回测开始时的ETH价格
+        const endPrice = equity[equity.length - 1].price; // 回测结束时的ETH价格
+        const ethHoldingReturn = (endPrice - startPrice) / startPrice; // ETH现货收益率
+        
         return {
             totalReturn: totalReturn,
             annualizedReturn: annualizedReturn,
@@ -412,6 +417,7 @@ class GridStrategy {
             winRate: winRate,
             maxDrawdown: maxDrawdown,
             sharpeRatio: sharpeRatio,
+            ethHoldingReturn: ethHoldingReturn,
             avgHoldingTime: avgHoldingTime,
             initialValue: initialValue,
             finalValue: finalValue,

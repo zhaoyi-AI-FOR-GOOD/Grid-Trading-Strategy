@@ -281,14 +281,16 @@ class ETHGridBacktestApp {
             annualizedReturn: (value) => this.formatPercent(value),
             totalTrades: (value) => value.toString(),
             maxDrawdown: (value) => this.formatPercent(value),
-            sharpeRatio: (value) => value.toFixed(2)
+            sharpeRatio: (value) => value.toFixed(2),
+            ethHoldingReturn: (value) => this.formatPercent(value)
         };
 
         const colorClasses = {
             totalReturn: (value) => value > 0 ? 'positive' : (value < 0 ? 'negative' : 'neutral'),
             annualizedReturn: (value) => value > 0 ? 'positive' : (value < 0 ? 'negative' : 'neutral'),
             maxDrawdown: (value) => value < 0.1 ? 'positive' : (value > 0.2 ? 'negative' : 'neutral'),
-            sharpeRatio: (value) => value > 1 ? 'positive' : (value < 0.5 ? 'negative' : 'neutral')
+            sharpeRatio: (value) => value > 1 ? 'positive' : (value < 0.5 ? 'negative' : 'neutral'),
+            ethHoldingReturn: (value) => value > 0 ? 'positive' : (value < 0 ? 'negative' : 'neutral')
         };
 
         Object.keys(formatters).forEach(key => {
