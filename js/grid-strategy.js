@@ -82,23 +82,61 @@ class GridStrategy {
     }
 
     /**
-     * 初始化网格持仓
+     * 初始化网格持仓 - 真正的网格交易部署
+     * 🔧 关键修复：根据当前价格和网格设置进行初始USDT/ETH分配
      */
     initializePositions() {
-        // 计算每个网格的资金分配
         const capitalPerGrid = this.config.initialCapital / this.config.gridCount;
+        let totalEthPurchased = 0;
+        let totalUsdtUsed = 0;
         
-        this.gridLevels.forEach((price, index) => {
-            this.positions.push({
+        console.log(`\n🚀 初始化网格交易 - 基准价格: $${this.basePrice.toFixed(2)}`);
+        console.log(`每个网格分配资金: $${capitalPerGrid.toLocaleString()}`);
+        
+        this.gridLevels.forEach((gridPrice, index) => {
+            const position = {
                 gridIndex: index,
-                price: price,
+                price: gridPrice,
                 quantity: 0,
                 allocated: capitalPerGrid,
-                status: 'waiting', // 'waiting', 'bought'
+                status: 'waiting',
                 buyPrice: null,
                 buyTime: null
-            });
+            };
+            
+            // 🎯 关键逻辑：如果网格价格高于当前价格，立即买入ETH
+            if (gridPrice > this.basePrice) {
+                // 高于基准价的网格：立即买入ETH，等待上涨时卖出
+                const margin = capitalPerGrid;
+                const investAmount = margin * this.config.leverage;
+                const quantity = investAmount / gridPrice;
+                const fee = margin * this.config.feeRate;
+                
+                // 购买ETH
+                position.quantity = quantity;
+                position.status = 'bought';
+                position.buyPrice = gridPrice;
+                position.buyTime = Date.now();
+                
+                // 从余额扣除保证金和手续费
+                this.balance -= (margin + fee);
+                totalEthPurchased += quantity;
+                totalUsdtUsed += (margin + fee);
+                
+                console.log(`📈 网格${index}(${gridPrice.toFixed(2)}): 买入${quantity.toFixed(6)}ETH, 费用$${(margin + fee).toLocaleString()}`);
+            } else {
+                // 低于或等于基准价的网格：保留USDT，等待下跌时买入
+                console.log(`💰 网格${index}(${gridPrice.toFixed(2)}): 预留$${capitalPerGrid.toLocaleString()}USDT等待买入`);
+            }
+            
+            this.positions.push(position);
         });
+        
+        console.log(`\n📊 初始化完成:`);
+        console.log(`总购买ETH: ${totalEthPurchased.toFixed(6)}ETH`);
+        console.log(`已使用USDT: $${totalUsdtUsed.toLocaleString()}`);
+        console.log(`剩余USDT: $${this.balance.toLocaleString()}`);
+        console.log(`初始ETH价值: $${(totalEthPurchased * this.basePrice).toLocaleString()}`);
     }
 
     /**
@@ -189,45 +227,47 @@ class GridStrategy {
     }
 
     /**
-     * 判断是否应该买入
-     * 修复：只有当价格下跌到网格价位以下时才买入（真正的网格交易逻辑）
+     * 判断是否应该买入 - 网格交易补仓逻辑
+     * 🔧 只处理低于基准价的网格补仓，高价网格已在初始化时购买
      * @param {number} currentPrice - 当前价格
      * @param {number} gridPrice - 网格价格
      * @param {Object} position - 持仓信息
      * @returns {boolean}
      */
     shouldBuy(currentPrice, gridPrice, position) {
-        // 🐛 添加调试日志
         const lowerBound = this.gridLevels[0];
         const upperBound = this.gridLevels[this.gridLevels.length - 1];
         
-        // 基本条件检查
+        // 基本条件检查：只有waiting状态且余额充足才能买入
         if (position.status !== 'waiting' || this.balance < position.allocated) {
             return false;
         }
         
-        // 检查价格是否在网格范围内 - 关键边界检查！
+        // 严格边界检查
         if (currentPrice < lowerBound || currentPrice > upperBound) {
-            if (currentPrice > upperBound) {
-                console.log(`🚨 shouldBuy: 价格$${currentPrice.toFixed(2)}超出上边界$${upperBound.toFixed(2)}，拒绝买入`);
-            }
             return false;
         }
         
-        // 🔧 修复关键逻辑：只有当价格下跌到网格价位以下时才买入
-        const tolerance = gridPrice * 0.002;
-        const shouldBuyResult = currentPrice < gridPrice - tolerance;
+        // 🎯 网格交易买入逻辑：只买入低于基准价的网格
+        // 高于基准价的网格已在初始化时购买，这里只处理补仓
+        if (gridPrice >= this.basePrice) {
+            return false; // 高价网格不在此处购买
+        }
+        
+        // 价格下跌到网格价位附近时买入
+        const tolerance = gridPrice * 0.002; // 0.2%容差
+        const shouldBuyResult = currentPrice <= gridPrice + tolerance;
         
         if (shouldBuyResult) {
-            console.log(`✅ shouldBuy: 价格$${currentPrice.toFixed(2)} < 网格$${gridPrice.toFixed(2)}, 可以买入`);
+            console.log(`✅ shouldBuy: 价格$${currentPrice.toFixed(2)}触达低价网格$${gridPrice.toFixed(2)}，补仓买入`);
         }
         
         return shouldBuyResult;
     }
 
     /**
-     * 判断是否应该卖出
-     * 修复：在买入价格基础上设置合理的卖出目标（真正的网格交易逻辑）
+     * 判断是否应该卖出 - 网格交易止盈逻辑
+     * 🔧 处理初始购买的高价网格和补仓的低价网格的卖出
      * @param {number} currentPrice - 当前价格
      * @param {number} gridIndex - 网格索引
      * @param {Object} position - 持仓信息
@@ -238,34 +278,48 @@ class GridStrategy {
             return false;
         }
         
-        // 检查价格是否在网格范围内
         const lowerBound = this.gridLevels[0];
         const upperBound = this.gridLevels[this.gridLevels.length - 1];
         
-        // 如果价格突破上边界，立即卖出所有持仓 - 关键边界处理！
+        // 边界强制卖出
         if (currentPrice > upperBound) {
             console.log(`🚨 shouldSell: 价格$${currentPrice.toFixed(2)}突破上边界$${upperBound.toFixed(2)}，强制卖出网格${gridIndex}`);
             return true;
         }
         
-        // 如果价格突破下边界，不卖出（持有等待反弹）
         if (currentPrice < lowerBound) {
             return false;
         }
         
-        // 🔧 修复关键逻辑：基于买入价格设置合理的卖出目标
-        const gridSpacing = (upperBound - lowerBound) / (this.gridLevels.length - 1);
-        const profitTarget = gridSpacing * 0.3;
-        const sellPrice = position.buyPrice + profitTarget;
+        // 🎯 网格交易卖出逻辑
+        const gridPrice = this.gridLevels[gridIndex];
+        const buyPrice = position.buyPrice;
         
-        const tolerance = sellPrice * 0.002;
-        const shouldSellResult = currentPrice >= sellPrice - tolerance;
+        // 分两种情况处理：
+        // 1. 初始购买的高价网格：价格上涨时卖出
+        // 2. 补仓的低价网格：价格回升时卖出
         
-        if (shouldSellResult) {
-            console.log(`✅ shouldSell: 价格$${currentPrice.toFixed(2)} >= 目标$${sellPrice.toFixed(2)}, 网格${gridIndex}可以卖出`);
+        if (buyPrice >= this.basePrice) {
+            // 初始购买的高价网格：等待价格进一步上涨
+            const targetPrice = buyPrice * 1.01; // 1%利润目标
+            const shouldSellResult = currentPrice >= targetPrice;
+            
+            if (shouldSellResult) {
+                console.log(`✅ shouldSell: 高价网格${gridIndex}，价格$${currentPrice.toFixed(2)}达到目标$${targetPrice.toFixed(2)}`);
+            }
+            
+            return shouldSellResult;
+        } else {
+            // 补仓的低价网格：价格回到网格上方时卖出
+            const targetPrice = Math.max(gridPrice * 1.005, buyPrice * 1.008); // 网格价+0.5%或成本价+0.8%
+            const shouldSellResult = currentPrice >= targetPrice;
+            
+            if (shouldSellResult) {
+                console.log(`✅ shouldSell: 低价网格${gridIndex}，价格$${currentPrice.toFixed(2)}回升到目标$${targetPrice.toFixed(2)}`);
+            }
+            
+            return shouldSellResult;
         }
-        
-        return shouldSellResult;
     }
 
     /**
