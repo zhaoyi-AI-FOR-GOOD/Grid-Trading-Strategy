@@ -3,7 +3,7 @@
  * 🔧 已修复核心买入卖出逻辑错误
  */
 
-console.log('🚀 GridStrategy调试卖出逻辑版本已加载 - v20250722-debug-sell');
+console.log('🚀 GridStrategy调试买入逻辑版本已加载 - v20250722-debug-buy');
 
 class GridStrategy {
     constructor(config) {
@@ -226,7 +226,7 @@ class GridStrategy {
 
         this.positions.forEach((position, gridIndex) => {
             // 检查买入条件
-            if (this.shouldBuy(currentPrice, position.price, position)) {
+            if (this.shouldBuy(currentPrice, position.gridPrice, position)) {
                 const buyTrade = this.executeBuy(gridIndex, candle);
                 if (buyTrade) trades.push(buyTrade);
             }
@@ -250,19 +250,41 @@ class GridStrategy {
      * @returns {boolean}
      */
     shouldBuy(currentPrice, gridPrice, position) {
+        // 🐛 详细调试：记录每次shouldBuy的调用
+        const isLowestGrid = position.gridIndex === 0;
+        
         // 只有卖出后的网格才需要补仓
         if (position.status !== 'waiting' || this.balance < position.allocated) {
+            if (isLowestGrid && position.status === 'waiting') {
+                console.log(`🔍 最低网格${position.gridIndex}跳过买入检查: status=${position.status}, balance=${this.balance.toFixed(2)}, allocated=${position.allocated}`);
+            }
             return false;
+        }
+        
+        // 🐛 详细调试：最低网格的买入检查
+        if (isLowestGrid) {
+            console.log(`🔍 最低网格${position.gridIndex}买入检查:`);
+            console.log(`   当前价格: $${currentPrice.toFixed(2)}`);
+            console.log(`   网格价格: $${gridPrice.toFixed(2)}`);
+            console.log(`   可用余额: $${this.balance.toFixed(2)}`);
+            console.log(`   持仓状态: ${position.status}`);
         }
         
         // 🎯 纯参数驱动：只按网格价格和挂单逻辑执行
         
         // 🎯 网格交易核心：价格回落到网格价位时补仓
         const tolerance = gridPrice * 0.002; // 0.2%容差
-        const shouldBuyResult = currentPrice <= gridPrice + tolerance;
+        const effectivePrice = gridPrice + tolerance;
+        const shouldBuyResult = currentPrice <= effectivePrice;
+        
+        // 🐛 详细调试：买入条件判断
+        if (isLowestGrid) {
+            console.log(`   有效触发价: $${effectivePrice.toFixed(2)} (原价+0.2%容差)`);
+            console.log(`   是否应该买入: ${shouldBuyResult} (${currentPrice.toFixed(2)} <= ${effectivePrice.toFixed(2)})`);
+        }
         
         if (shouldBuyResult) {
-            console.log(`✅ 网格补仓买入: 价格$${currentPrice.toFixed(2)} ≤ 网格$${gridPrice.toFixed(2)}`);
+            console.log(`✅ 网格${position.gridIndex}补仓买入: 价格$${currentPrice.toFixed(2)} ≤ 网格$${gridPrice.toFixed(2)}`);
         }
         
         return shouldBuyResult;
