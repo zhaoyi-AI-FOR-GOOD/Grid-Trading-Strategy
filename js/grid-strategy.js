@@ -518,8 +518,7 @@ class GridStrategy {
         const avgHoldingTime = sellTrades.length > 0 ? 
             sellTrades.reduce((sum, t) => sum + t.holdingTime, 0) / sellTrades.length : 0;
         
-        // 总利润计算
-        const totalProfit = finalValue - initialValue;
+        // 使用已计算的totalProfit（第491行）
         
         // ETH现货收益率将在app.js中通过priceRange计算
         
