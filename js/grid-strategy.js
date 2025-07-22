@@ -681,13 +681,10 @@ class GridStrategy {
                 gridTradeCount: this.orders.filter(o => o.type === 'sell').length,
                 activePositions: this.positions.filter(p => p.status === 'bought').length,
                 calculationVerification: {
-                    originalGridProfit: gridTradingProfit,
-                    adjustedGridProfit: adjustedGridProfit,
+                    realizedProfit: gridTradingProfit,
                     holdingProfit: holdingProfit,
-                    residual: residual,
-                    finalSum: adjustedGridProfit + holdingProfit,
-                    actualTotal: totalProfit,
-                    isValid: Math.abs(adjustedGridProfit + holdingProfit - totalProfit) < 0.01
+                    totalProfit: realTotalProfit,
+                    isValid: Math.abs(realTotalProfit - (gridTradingProfit + holdingProfit)) < 0.01
                 }
             }
         };
