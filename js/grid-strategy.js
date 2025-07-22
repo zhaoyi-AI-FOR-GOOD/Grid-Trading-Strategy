@@ -3,7 +3,7 @@
  * 🔧 已修复核心买入卖出逻辑错误
  */
 
-console.log('🚀 GridStrategy正确网格交易逻辑版本已加载 - v20250722-correct-grid-logic');
+console.log('🚀 GridStrategy完整边界检查版本已加载 - v20250722-boundary-fix');
 
 class GridStrategy {
     constructor(config) {
@@ -244,6 +244,13 @@ class GridStrategy {
             return false;
         }
         
+        // 🎯 边界检查：价格超出网格边界时不买入
+        const lowerBound = this.gridLevels[0];
+        const upperBound = this.gridLevels[this.gridLevels.length - 1];
+        if (currentPrice < lowerBound || currentPrice > upperBound) {
+            return false;
+        }
+        
         // 🎯 网格交易核心：价格回落到网格价位时补仓
         const tolerance = gridPrice * 0.002; // 0.2%容差
         const shouldBuyResult = currentPrice <= gridPrice + tolerance;
@@ -271,10 +278,18 @@ class GridStrategy {
         // 🎯 网格交易核心：使用预设的卖出价位
         const targetSellPrice = position.sellPrice;
         
-        // 如果没有卖出价位（最高网格），说明已到用户设定的价格区间上限
+        // 如果没有卖出价位（最高网格），检查是否超出网格边界
         if (!targetSellPrice) {
-            // 🎯 最高网格：按用户参数设定，没有更高价位可卖，持有不动
-            return false;
+            // 🎯 最高网格：当价格超出网格上边界时，应该全部卖出
+            const upperBound = this.gridLevels[this.gridLevels.length - 1];
+            const tolerance = upperBound * 0.002; // 0.2%容差
+            const shouldSellBeyondBoundary = currentPrice >= upperBound - tolerance;
+            
+            if (shouldSellBeyondBoundary) {
+                console.log(`✅ 最高网格强制卖出: 价格$${currentPrice.toFixed(2)} ≥ 网格上边界$${upperBound.toFixed(2)}`);
+            }
+            
+            return shouldSellBeyondBoundary;
         }
         
         // 价格触及卖出挂单价位时执行
