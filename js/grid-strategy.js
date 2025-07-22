@@ -3,7 +3,7 @@
  * 🔧 已修复核心买入卖出逻辑错误
  */
 
-console.log('🚀 GridStrategy纯参数驱动版本已加载 - v20250722-param-driven');
+console.log('🚀 GridStrategy调试卖出逻辑版本已加载 - v20250722-debug-sell');
 
 class GridStrategy {
     constructor(config) {
@@ -125,6 +125,12 @@ class GridStrategy {
                 // 最高网格：卖给网格上边界价格（用户设定的+10%）
                 const upperBound = this.basePrice * (1 + this.config.upperBound / 100);
                 sellPrice = upperBound;
+                
+                // 🐛 调试：最高网格sellPrice设置
+                console.log(`🔍 最高网格${index}的sellPrice设置:`);
+                console.log(`   基准价格: $${this.basePrice.toFixed(2)}`);
+                console.log(`   上边界百分比: ${this.config.upperBound}%`);
+                console.log(`   计算的sellPrice: $${sellPrice.toFixed(2)}`);
             }
             
             const position = {
@@ -271,7 +277,13 @@ class GridStrategy {
      * @returns {boolean}
      */
     shouldSell(currentPrice, gridIndex, position) {
+        // 🐛 详细调试：记录每次shouldSell的调用
+        const isLastGrid = gridIndex === this.gridLevels.length - 1;
+        
         if (position.status !== 'bought' || position.quantity <= 0) {
+            if (isLastGrid) {
+                console.log(`🔍 最高网格${gridIndex}跳过卖出检查: status=${position.status}, quantity=${position.quantity}`);
+            }
             return false;
         }
         
@@ -284,12 +296,28 @@ class GridStrategy {
             return false;
         }
         
+        // 🐛 详细调试：最高网格的卖出检查
+        if (isLastGrid) {
+            console.log(`🔍 最高网格${gridIndex}卖出检查:`);
+            console.log(`   当前价格: $${currentPrice.toFixed(2)}`);
+            console.log(`   卖出价格: $${targetSellPrice.toFixed(2)}`);
+            console.log(`   持仓数量: ${position.quantity.toFixed(6)}ETH`);
+            console.log(`   持仓状态: ${position.status}`);
+        }
+        
         // 价格触及卖出挂单价位时执行
         const tolerance = targetSellPrice * 0.002; // 0.2%容差，模拟挂单成交
-        const shouldSellResult = currentPrice >= targetSellPrice - tolerance;
+        const effectivePrice = targetSellPrice - tolerance;
+        const shouldSellResult = currentPrice >= effectivePrice;
+        
+        // 🐛 详细调试：卖出条件判断
+        if (isLastGrid) {
+            console.log(`   有效触发价: $${effectivePrice.toFixed(2)} (原价-0.2%容差)`);
+            console.log(`   是否应该卖出: ${shouldSellResult} (${currentPrice.toFixed(2)} >= ${effectivePrice.toFixed(2)})`);
+        }
         
         if (shouldSellResult) {
-            console.log(`✅ 网格卖出挂单执行: 价格$${currentPrice.toFixed(2)} ≥ 卖出价$${targetSellPrice.toFixed(2)}`);
+            console.log(`✅ 网格${gridIndex}卖出挂单执行: 价格$${currentPrice.toFixed(2)} ≥ 卖出价$${targetSellPrice.toFixed(2)}`);
         }
         
         return shouldSellResult;
