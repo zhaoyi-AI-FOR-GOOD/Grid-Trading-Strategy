@@ -172,30 +172,35 @@ class GridStrategy {
 
     /**
      * 判断是否应该买入
+     * 修复：只有当价格下跌到网格价位以下时才买入（真正的网格交易逻辑）
      * @param {number} currentPrice - 当前价格
      * @param {number} gridPrice - 网格价格
      * @param {Object} position - 持仓信息
      * @returns {boolean}
      */
     shouldBuy(currentPrice, gridPrice, position) {
-        const tolerance = gridPrice * 0.001; // 0.1% 容差
+        // 基本条件检查
+        if (position.status !== 'waiting' || this.balance < position.allocated) {
+            return false;
+        }
         
         // 检查价格是否在网格范围内
         const lowerBound = this.gridLevels[0];
         const upperBound = this.gridLevels[this.gridLevels.length - 1];
         
-        // 价格必须在网格范围内才能买入
         if (currentPrice < lowerBound || currentPrice > upperBound) {
             return false;
         }
         
-        return currentPrice <= gridPrice + tolerance && 
-               position.status === 'waiting' && 
-               this.balance >= position.allocated;
+        // 🔧 修复关键逻辑：只有当价格下跌到网格价位以下时才买入
+        // 这确保了"低买"的原则，避免在基准价格时立即买入
+        const tolerance = gridPrice * 0.002; // 0.2% 容差，防止价格波动误触发
+        return currentPrice < gridPrice - tolerance;
     }
 
     /**
      * 判断是否应该卖出
+     * 修复：在买入价格基础上设置合理的卖出目标（真正的网格交易逻辑）
      * @param {number} currentPrice - 当前价格
      * @param {number} gridIndex - 网格索引
      * @param {Object} position - 持仓信息
@@ -220,14 +225,15 @@ class GridStrategy {
             return false;
         }
         
-        // 在网格范围内，按正常网格逻辑卖出
-        if (gridIndex < this.gridLevels.length - 1) {
-            const upperGridPrice = this.gridLevels[gridIndex + 1];
-            const tolerance = upperGridPrice * 0.001;
-            return currentPrice >= upperGridPrice - tolerance;
-        }
+        // 🔧 修复关键逻辑：基于买入价格设置合理的卖出目标
+        // 使用更保守的利润目标，避免过高收益
+        const gridSpacing = (upperBound - lowerBound) / (this.gridLevels.length - 1);
+        const profitTarget = gridSpacing * 0.3; // 使用30%的网格间距作为利润目标，更加保守
+        const sellPrice = position.buyPrice + profitTarget;
         
-        return false;
+        // 添加小幅容差防止价格波动
+        const tolerance = sellPrice * 0.002;
+        return currentPrice >= sellPrice - tolerance;
     }
 
     /**
