@@ -1,6 +1,10 @@
 /**
- * 网格交易策略引擎
+ * 网格交易策略引擎 - 修复版本 v20250722-fix
+ * 🔧 已修复核心买入卖出逻辑错误
  */
+
+console.log('🚀 GridStrategy修复版本已加载 - v20250722-fix');
+
 class GridStrategy {
     constructor(config) {
         this.config = {
