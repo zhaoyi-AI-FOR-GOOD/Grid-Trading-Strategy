@@ -156,6 +156,20 @@ class GridStrategy {
     checkGridSignals(candle, index) {
         const trades = [];
         const currentPrice = candle.close;
+        const upperBound = this.gridLevels[this.gridLevels.length - 1];
+
+        // 🐛 添加持仓状态调试
+        if (currentPrice > upperBound) {
+            const boughtPositions = this.positions.filter(p => p.status === 'bought' && p.quantity > 0);
+            if (boughtPositions.length > 0) {
+                console.log(`🚨 checkGridSignals: 价格$${currentPrice.toFixed(2)}超出边界，但仍有${boughtPositions.length}个持仓！`);
+                boughtPositions.forEach((pos, i) => {
+                    if (i < 3) { // 只显示前3个
+                        console.log(`   网格${pos.gridIndex}: ${pos.quantity.toFixed(6)}ETH, 买入价$${pos.buyPrice}`);
+                    }
+                });
+            }
+        }
 
         this.positions.forEach((position, gridIndex) => {
             // 检查买入条件
