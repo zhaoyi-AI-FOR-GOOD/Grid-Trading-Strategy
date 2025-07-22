@@ -291,35 +291,42 @@ class GridStrategy {
             return false;
         }
         
-        // 🎯 网格交易卖出逻辑
+        // 🎯 真正的网格交易卖出逻辑 - 基于网格间距
+        const lowerPrice = this.gridLevels[0];
+        const upperPrice = this.gridLevels[this.gridLevels.length - 1];
+        const gridSpacing = (upperPrice - lowerPrice) / (this.gridLevels.length - 1);
+        
         const gridPrice = this.gridLevels[gridIndex];
         const buyPrice = position.buyPrice;
         
-        // 分两种情况处理：
-        // 1. 初始购买的高价网格：价格上涨时卖出
-        // 2. 补仓的低价网格：价格回升时卖出
+        // 🔧 核心修复：卖出目标基于网格间距，而非固定百分比
+        let targetSellPrice;
         
         if (buyPrice >= this.basePrice) {
-            // 初始购买的高价网格：等待价格进一步上涨
-            const targetPrice = buyPrice * 1.01; // 1%利润目标
-            const shouldSellResult = currentPrice >= targetPrice;
-            
-            if (shouldSellResult) {
-                console.log(`✅ shouldSell: 高价网格${gridIndex}，价格$${currentPrice.toFixed(2)}达到目标$${targetPrice.toFixed(2)}`);
-            }
-            
-            return shouldSellResult;
+            // 初始购买的高价网格：当价格上涨一个网格间距时卖出
+            targetSellPrice = buyPrice + gridSpacing;
         } else {
-            // 补仓的低价网格：价格回到网格上方时卖出
-            const targetPrice = Math.max(gridPrice * 1.005, buyPrice * 1.008); // 网格价+0.5%或成本价+0.8%
-            const shouldSellResult = currentPrice >= targetPrice;
+            // 补仓的低价网格：当价格回升到下一个网格时卖出
+            // 找到当前网格上方的下一个网格价格
+            let nextGridPrice = gridPrice + gridSpacing;
             
-            if (shouldSellResult) {
-                console.log(`✅ shouldSell: 低价网格${gridIndex}，价格$${currentPrice.toFixed(2)}回升到目标$${targetPrice.toFixed(2)}`);
+            // 如果没有上方网格，使用买入价+网格间距
+            if (gridIndex >= this.gridLevels.length - 1) {
+                nextGridPrice = buyPrice + gridSpacing;
             }
             
-            return shouldSellResult;
+            targetSellPrice = nextGridPrice;
         }
+        
+        // 添加小幅容差，避免价格波动错失机会
+        const tolerance = targetSellPrice * 0.002; // 0.2%容差
+        const shouldSellResult = currentPrice >= targetSellPrice - tolerance;
+        
+        if (shouldSellResult) {
+            console.log(`✅ shouldSell: 网格${gridIndex}，价格$${currentPrice.toFixed(2)}达到目标$${targetSellPrice.toFixed(2)} (网格间距$${gridSpacing.toFixed(2)})`);
+        }
+        
+        return shouldSellResult;
     }
 
     /**
@@ -653,14 +660,27 @@ class GridStrategy {
         // 2. 持仓浮盈浮亏（当前持仓的未实现收益）
         let holdingProfit = 0;
         let positionCost = 0;
-        this.positions.forEach(position => {
+        let activePositions = 0;
+        
+        console.log(`\n🔍 检查当前持仓状态:`);
+        this.positions.forEach((position, index) => {
             if (position.status === 'bought' && position.quantity > 0) {
                 const cost = position.quantity * position.buyPrice;
                 const currentVal = position.quantity * currentPrice;
                 positionCost += cost;
                 holdingProfit += (currentVal - cost);
+                activePositions++;
+                
+                if (activePositions <= 5) { // 显示前5个持仓
+                    console.log(`持仓${index}: ${position.quantity.toFixed(6)}ETH, 成本$${position.buyPrice.toFixed(2)}, 当前值$${currentVal.toLocaleString()}`);
+                }
             }
         });
+        
+        console.log(`活跃持仓数: ${activePositions}个`);
+        console.log(`持仓总成本: $${positionCost.toLocaleString()}`);
+        console.log(`持仓浮盈浮亏: $${holdingProfit.toLocaleString()}`);
+        console.log(`已实现利润: $${gridTradingProfit.toLocaleString()}`);
         
         // 3. 计算余额中未被分配到上述两项的部分
         const calculatedSum = gridTradingProfit + holdingProfit;
