@@ -252,6 +252,8 @@ class ETHGridBacktestApp {
         console.log('接收到的results:', results);
         console.log('results.metrics:', results.metrics);
         console.log('results.profitBreakdown:', results.profitBreakdown);
+        console.log('results.dataInfo:', results.dataInfo);
+        console.log('results.dataInfo.priceRange:', results.dataInfo?.priceRange);
         
         
         // 显示利润分解
