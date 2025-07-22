@@ -572,11 +572,21 @@ class GridStrategy {
         // 使用与calculateMetrics完全相同的初始值
         const initialValue = equity && equity.length > 0 ? equity[0].totalValue : this.config.initialCapital;
         
-        // 计算当前总资产价值
+        // 🐛 关键调试：详细追踪calculateTotalValue的计算
+        console.log(`\n🔍 calculateProfitBreakdown调试 - 当前价格: $${currentPrice.toFixed(2)}`);
+        console.log(`初始资产: $${initialValue.toLocaleString()}`);
+        
         const currentTotalValue = this.calculateTotalValue(currentPrice);
+        console.log(`当前总资产: $${currentTotalValue.toLocaleString()}`);
         
         // 总利润 = 当前总资产 - 初始资产
         const totalProfit = currentTotalValue - initialValue;
+        console.log(`总利润: $${totalProfit.toLocaleString()} (${((totalProfit/initialValue)*100).toFixed(2)}%)`);
+        
+        // 🐛 检查余额和持仓价值的分解
+        console.log(`当前余额: $${this.balance.toLocaleString()}`);
+        const netPositionValue = currentTotalValue - this.balance;
+        console.log(`净持仓价值: $${netPositionValue.toLocaleString()}`);
         
         // 1. 网格交易已实现利润（完成的买卖差价）
         let gridTradingProfit = 0;
