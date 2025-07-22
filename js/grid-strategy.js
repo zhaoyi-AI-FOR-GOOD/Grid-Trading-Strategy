@@ -467,7 +467,8 @@ class GridStrategy {
             return {};
         }
 
-        const initialValue = equity[0].totalValue;
+        // 🔧 修复：使用用户设置的初始资金作为基准
+        const initialValue = this.config.initialCapital;
         const finalValue = equity[equity.length - 1].totalValue;
         const totalReturn = (finalValue - initialValue) / initialValue;
         
@@ -590,8 +591,8 @@ class GridStrategy {
      * @returns {Object} 利润分解结果
      */
     calculateProfitBreakdown(currentPrice, equity) {
-        // 使用与calculateMetrics完全相同的初始值
-        const initialValue = equity && equity.length > 0 ? equity[0].totalValue : this.config.initialCapital;
+        // 🔧 修复：初始值应该是用户设置的初始资金，而非计算的初始总价值
+        const initialValue = this.config.initialCapital;
         
         // 🐛 关键调试：详细追踪calculateTotalValue的计算
         console.log(`\n🔍 calculateProfitBreakdown调试 - 当前价格: $${currentPrice.toFixed(2)}`);
