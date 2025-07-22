@@ -257,6 +257,14 @@ class ETHGridBacktestApp {
         // 显示利润分解
         this.displayProfitBreakdown(results.profitBreakdown);
         
+        // 计算并添加ETH现货收益率
+        if (results.dataInfo && results.dataInfo.priceRange) {
+            const startPrice = results.dataInfo.priceRange.start;
+            const endPrice = results.dataInfo.priceRange.end;
+            const ethHoldingReturn = (endPrice - startPrice) / startPrice;
+            results.metrics.ethHoldingReturn = ethHoldingReturn;
+        }
+        
         // 显示关键指标
         this.displayMetrics(results.metrics);
         
