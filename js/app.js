@@ -263,6 +263,15 @@ class ETHGridBacktestApp {
             const endPrice = results.dataInfo.priceRange.end;
             const ethHoldingReturn = (endPrice - startPrice) / startPrice;
             results.metrics.ethHoldingReturn = ethHoldingReturn;
+            
+            // 调试输出
+            console.log('=== ETH现货收益率计算 ===');
+            console.log('起始价格:', startPrice);
+            console.log('结束价格:', endPrice);
+            console.log('ETH收益率:', ethHoldingReturn);
+            console.log('ETH收益率(%):', (ethHoldingReturn * 100).toFixed(2) + '%');
+        } else {
+            console.warn('未找到priceRange数据:', results.dataInfo);
         }
         
         // 显示关键指标
@@ -318,6 +327,8 @@ class ETHGridBacktestApp {
                     console.log(`指标 ${key}: 颜色类=${colorClass} (基于值=${value})`);
                     element.classList.add(colorClass);
                 }
+            } else if (key === 'ethHoldingReturn') {
+                console.warn(`ETH现货收益率显示问题: element=${element}, metrics[${key}]=${metrics[key]}`);
             }
         });
     }
