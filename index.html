@@ -112,6 +112,7 @@
                 </div>
 
                 <button id="startBacktest" class="btn-primary">开始回测</button>
+                <button id="runTests" class="btn-secondary" style="margin-top: 10px;">运行自动化测试</button>
             </div>
 
             <!-- 结果展示区域 -->
@@ -189,6 +190,13 @@
                     <h3>优化建议</h3>
                     <div id="suggestions"></div>
                 </div>
+
+                <!-- 测试结果面板 -->
+                <div class="test-results-panel" id="testResultsPanel" style="display: none;">
+                    <h3>🧪 自动化测试报告</h3>
+                    <div id="testSummary" class="test-summary"></div>
+                    <div id="testDetails" class="test-details"></div>
+                </div>
             </div>
         </div>
     </div>
@@ -196,6 +204,7 @@
     <script src="js/binance-api.js?v=20250722-math-validation"></script>
     <script src="js/grid-strategy.js?v=20250722-math-validation"></script>
     <script src="js/backtest-engine.js?v=20250722-math-validation"></script>
+    <script src="test/grid-strategy-test.js?v=20250722-test-integration"></script>
     <script src="js/app.js?v=20250722-math-validation"></script>
 </body>
 </html>

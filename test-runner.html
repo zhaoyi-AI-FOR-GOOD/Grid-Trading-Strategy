@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>网格交易策略测试运行器</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .success { background: #d4edda; border-color: #c3e6cb; }
+        .failure { background: #f8d7da; border-color: #f5c6cb; }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        button:hover { background: #0056b3; }
+        button:disabled { background: #6c757d; }
+        pre {
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 4px;
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧪 网格交易策略自动化测试</h1>
+        <p>这个页面用于验证网格交易策略的所有功能是否正常工作</p>
+        
+        <div id="testControls">
+            <button id="runTestBtn" onclick="runTests()">运行所有测试</button>
+        </div>
+        
+        <div id="testResults" style="margin-top: 20px;"></div>
+    </div>
+
+    <script src="js/grid-strategy.js?v=20250722-math-validation"></script>
+    <script src="test/grid-strategy-test.js?v=20250722-test-integration"></script>
+    
+    <script>
+        async function runTests() {
+            const btn = document.getElementById('runTestBtn');
+            const results = document.getElementById('testResults');
+            
+            btn.disabled = true;
+            btn.textContent = '测试运行中...';
+            results.innerHTML = '<div>正在运行测试，请查看控制台...</div>';
+            
+            try {
+                console.log('🧪 开始运行网格交易策略测试套件...');
+                
+                // 创建测试套件实例
+                const testSuite = new GridStrategyTestSuite();
+                
+                // 运行所有测试
+                const report = await testSuite.runAllTests();
+                
+                // 显示结果
+                const resultClass = report.failed === 0 ? 'success' : 'failure';
+                const statusText = report.failed === 0 ? '🎉 所有测试通过!' : `❌ ${report.failed}个测试失败`;
+                
+                results.innerHTML = `
+                    <div class="test-section ${resultClass}">
+                        <h3>${statusText}</h3>
+                        <p><strong>总测试数:</strong> ${report.total}</p>
+                        <p><strong>通过:</strong> ${report.passed}</p>
+                        <p><strong>失败:</strong> ${report.failed}</p>
+                        <p><strong>成功率:</strong> ${report.successRate.toFixed(1)}%</p>
+                        
+                        ${report.failed > 0 ? `
+                            <h4>失败测试详情:</h4>
+                            <pre>${report.details
+                                .filter(test => test.status === 'FAIL')
+                                .map(test => `${test.name}: 期望 ${test.expected}, 实际 ${test.actual}`)
+                                .join('\n')}</pre>
+                        ` : `
+                            <p>✅ 所有功能验证通过:</p>
+                            <ul>
+                                <li>✅ 基础配置验证</li>
+                                <li>✅ 网格初始化验证</li>
+                                <li>✅ 买卖逻辑验证</li>
+                                <li>✅ 交易执行验证</li>
+                                <li>✅ 利润计算验证</li>
+                                <li>✅ 边界情况验证</li>
+                                <li>✅ 数学关系验证</li>
+                                <li>✅ 性能一致性验证</li>
+                            </ul>
+                        `}
+                    </div>
+                `;
+                
+                console.log('🎉 测试完成!', report);
+                
+            } catch (error) {
+                console.error('测试执行失败:', error);
+                results.innerHTML = `
+                    <div class="test-section failure">
+                        <h3>❌ 测试执行失败</h3>
+                        <p>${error.message}</p>
+                        <p>请检查控制台获取详细错误信息</p>
+                    </div>
+                `;
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '运行所有测试';
+            }
+        }
+        
+        // 页面加载时自动运行测试
+        window.addEventListener('load', () => {
+            setTimeout(runTests, 1000);
+        });
+    </script>
+</body>
+</html>

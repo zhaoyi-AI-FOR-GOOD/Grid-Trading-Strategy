@@ -47,6 +47,11 @@ class ETHGridBacktestApp {
             this.startBacktest();
         });
 
+        // 运行测试按钮
+        document.getElementById('runTests').addEventListener('click', () => {
+            this.runTests();
+        });
+
         // 表单验证和网格预览更新
         document.getElementById('initialCapital').addEventListener('input', () => {
             this.validateInputs();
@@ -746,6 +751,142 @@ class ETHGridBacktestApp {
         
         // 如果时间范围有效，重新验证所有输入
         return this.validateInputs();
+    }
+
+    /**
+     * 运行自动化测试
+     */
+    async runTests() {
+        console.log('🧪 开始运行自动化测试套件...');
+        
+        // 禁用测试按钮
+        const runTestsBtn = document.getElementById('runTests');
+        runTestsBtn.disabled = true;
+        runTestsBtn.textContent = '测试运行中...';
+        
+        // 显示加载状态
+        this.showTestLoading();
+        
+        try {
+            // 创建测试套件实例
+            const testSuite = new GridStrategyTestSuite();
+            
+            // 运行所有测试
+            const testReport = await testSuite.runAllTests();
+            
+            // 显示测试结果
+            this.displayTestResults(testReport);
+            
+        } catch (error) {
+            console.error('测试执行失败:', error);
+            this.showTestError(error.message);
+        } finally {
+            // 重新启用测试按钮
+            runTestsBtn.disabled = false;
+            runTestsBtn.textContent = '运行自动化测试';
+        }
+    }
+
+    /**
+     * 显示测试加载状态
+     */
+    showTestLoading() {
+        document.getElementById('testResultsPanel').style.display = 'block';
+        document.getElementById('testSummary').innerHTML = `
+            <div class="loading-spinner" style="text-align: center; padding: 20px;">
+                <div class="spinner"></div>
+                <p>正在运行自动化测试...</p>
+            </div>
+        `;
+        document.getElementById('testDetails').innerHTML = '';
+    }
+
+    /**
+     * 显示测试结果
+     * @param {Object} testReport - 测试报告
+     */
+    displayTestResults(testReport) {
+        const summaryHtml = `
+            <div class="test-summary-cards">
+                <div class="test-card ${testReport.failed === 0 ? 'success' : 'failure'}">
+                    <h4>测试总览</h4>
+                    <div class="test-stats">
+                        <div class="stat-item">
+                            <span class="stat-label">总测试数:</span>
+                            <span class="stat-value">${testReport.total}</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">通过:</span>
+                            <span class="stat-value success-text">${testReport.passed} ✅</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">失败:</span>
+                            <span class="stat-value ${testReport.failed > 0 ? 'failure-text' : ''}">${testReport.failed} ${testReport.failed > 0 ? '❌' : '✅'}</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">成功率:</span>
+                            <span class="stat-value ${testReport.successRate === 100 ? 'success-text' : 'warning-text'}">${testReport.successRate.toFixed(1)}%</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        let detailsHtml = '';
+        if (testReport.failed > 0) {
+            detailsHtml = `
+                <div class="test-failures">
+                    <h4>❌ 失败测试详情</h4>
+                    ${testReport.details
+                        .filter(test => test.status === 'FAIL')
+                        .map(test => `
+                            <div class="failure-item">
+                                <strong>${test.name}</strong>
+                                <p>期望: ${test.expected}, 实际: ${test.actual}${test.diff ? `, 差异: ${test.diff}` : ''}</p>
+                            </div>
+                        `).join('')}
+                </div>
+            `;
+        } else {
+            detailsHtml = `
+                <div class="test-success">
+                    <h4>🎉 所有测试通过!</h4>
+                    <p>网格交易策略系统的所有数据验证都已通过，系统运行正常。</p>
+                    <div class="test-categories">
+                        <div class="category-item">✅ 基础配置验证</div>
+                        <div class="category-item">✅ 网格初始化验证</div>
+                        <div class="category-item">✅ 买卖逻辑验证</div>
+                        <div class="category-item">✅ 交易执行验证</div>
+                        <div class="category-item">✅ 利润计算验证</div>
+                        <div class="category-item">✅ 边界情况验证</div>
+                        <div class="category-item">✅ 数学关系验证</div>
+                        <div class="category-item">✅ 性能一致性验证</div>
+                    </div>
+                </div>
+            `;
+        }
+
+        document.getElementById('testSummary').innerHTML = summaryHtml;
+        document.getElementById('testDetails').innerHTML = detailsHtml;
+        document.getElementById('testResultsPanel').style.display = 'block';
+    }
+
+    /**
+     * 显示测试错误
+     * @param {string} message - 错误消息
+     */
+    showTestError(message) {
+        const errorHtml = `
+            <div class="test-error">
+                <h4>❌ 测试执行失败</h4>
+                <p>${message}</p>
+                <p><small>请检查控制台获取详细错误信息</small></p>
+            </div>
+        `;
+        
+        document.getElementById('testSummary').innerHTML = errorHtml;
+        document.getElementById('testDetails').innerHTML = '';
+        document.getElementById('testResultsPanel').style.display = 'block';
     }
 
     /**
