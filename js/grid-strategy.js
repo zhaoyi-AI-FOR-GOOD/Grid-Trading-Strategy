@@ -3,7 +3,7 @@
  * 🔧 已修复核心买入卖出逻辑错误
  */
 
-console.log('🚀 GridStrategy正确网格逻辑版本已加载 - v20250722-correct-grid');
+console.log('🚀 GridStrategy完全重构版本已加载 - v20250722-complete-refactor');
 
 class GridStrategy {
     constructor(config) {
@@ -82,8 +82,8 @@ class GridStrategy {
     }
 
     /**
-     * 初始化网格交易 - 正确的网格策略初始化
-     * 🔧 基准价格附近均匀分配ETH和USDT，设置买入卖出挂单
+     * 初始化网格交易 - 正确的高抛低吸策略
+     * 🔧 用50%资金买入ETH，在不同价位设置买卖网格
      */
     initializePositions() {
         console.log(`\n🚀 初始化网格交易 - 基准价格: $${this.basePrice.toFixed(2)}`);
@@ -91,77 +91,79 @@ class GridStrategy {
         console.log(`网格数量: ${this.config.gridCount}`);
         console.log(`杠杆倍数: ${this.config.leverage}x`);
         
-        const capitalPerGrid = this.config.initialCapital / this.config.gridCount;
+        // 🎯 步骤1：用50%资金在基准价格买入ETH
+        const initialInvestmentRatio = 0.5; // 50%资金买ETH，50%保留USDT
+        const initialInvestment = this.config.initialCapital * initialInvestmentRatio;
+        const initialETHAmount = (initialInvestment * this.config.leverage) / this.basePrice;
+        const initialFee = initialInvestment * this.config.feeRate;
         
-        // 🎯 找到基准价格在网格中的位置
+        // 扣除初始投资和手续费
+        this.balance -= (initialInvestment + initialFee);
+        this.totalETHHoldings = initialETHAmount;
+        
+        console.log(`\n💰 初始投资:`);
+        console.log(`投资金额: $${initialInvestment.toLocaleString()} (50%资金)`);
+        console.log(`购买ETH: ${initialETHAmount.toFixed(6)}ETH @ $${this.basePrice.toFixed(2)}`);
+        console.log(`手续费: $${initialFee.toLocaleString()}`);
+        console.log(`剩余USDT: $${this.balance.toLocaleString()}`);
+        
+        // 🎯 步骤2：为每个网格设置买卖价格和分配ETH/USDT
+        const ethPerGrid = initialETHAmount / this.config.gridCount;
+        const usdtPerGrid = this.balance / this.config.gridCount;
+        
+        console.log(`\n📊 网格分配:`);
+        console.log(`每个网格ETH分配: ${ethPerGrid.toFixed(6)}ETH`);
+        console.log(`每个网格USDT分配: $${usdtPerGrid.toLocaleString()}`);
+        
+        // 找到基准价格在网格中的位置
         const baseGridIndex = this.findBaseGridIndex();
-        
-        console.log(`\n💰 网格初始化策略:`);
-        console.log(`每个网格分配资金: $${capitalPerGrid.toLocaleString()}`);
         console.log(`基准价格对应网格索引: ${baseGridIndex}`);
         
         this.gridLevels.forEach((gridPrice, index) => {
-            // 设置买入和卖出价格
-            let sellPrice = null;
-            let buyPrice = null;
-            
-            // 卖出价格（上一级网格）
-            if (index < this.gridLevels.length - 1) {
-                sellPrice = this.gridLevels[index + 1];
-            } else {
-                // 最高网格：卖给网格上边界价格
-                const upperBound = this.basePrice * (1 + this.config.upperBound / 100);
-                sellPrice = upperBound;
-            }
-            
-            // 买入价格（下一级网格）  
-            if (index > 0) {
-                buyPrice = this.gridLevels[index - 1];
-            } else {
-                // 最低网格：买入下边界价格
-                const lowerBound = this.basePrice * (1 + this.config.lowerBound / 100);
-                buyPrice = lowerBound;
-            }
+            // 🎯 关键：确定每个网格的角色
+            const isAboveBase = index > baseGridIndex;
             
             const position = {
                 gridIndex: index,
                 gridPrice: gridPrice,
-                sellPrice: sellPrice,
-                buyPrice: buyPrice,
-                allocated: capitalPerGrid,
-                quantity: 0,
-                status: 'waiting'
+                ethAmount: isAboveBase ? 0 : ethPerGrid,           // 基准价以上持有0ETH，等待买入
+                usdtAmount: isAboveBase ? usdtPerGrid : 0,         // 基准价以上持有USDT，等待买入
+                sellPrice: this.calculateSellPrice(gridPrice),     // 卖出价格
+                buyPrice: this.calculateBuyPrice(gridPrice),       // 买入价格
+                status: isAboveBase ? 'waiting_buy' : 'holding_eth', // 等待买入 vs 持有ETH
+                buyTime: isAboveBase ? null : Date.now(),
+                actualBuyPrice: isAboveBase ? null : this.basePrice
             };
             
-            // 🎯 关键：基准价格以下的网格初始买入ETH，以上的网格持有USDT等待买入
-            if (index <= baseGridIndex) {
-                // 基准价格以下：初始买入ETH
-                const margin = capitalPerGrid;
-                const investAmount = margin * this.config.leverage;
-                const quantity = investAmount / this.basePrice;
-                const fee = margin * this.config.feeRate;
-                
-                if (this.balance >= margin + fee) {
-                    position.quantity = quantity;
-                    position.status = 'bought';
-                    position.actualBuyPrice = this.basePrice;
-                    position.buyTime = Date.now();
-                    
-                    this.balance -= (margin + fee);
-                    
-                    console.log(`✅ 网格${index}: 初始买入${quantity.toFixed(6)}ETH@$${this.basePrice.toFixed(2)}, 挂卖单@$${sellPrice.toFixed(2)}`);
-                }
-            } else {
-                // 基准价格以上：等待价格下跌时买入
-                console.log(`⏳ 网格${index}: 等待买入@$${gridPrice.toFixed(2)}, 挂卖单@$${sellPrice?.toFixed(2) || 'N/A'}`);
-            }
-            
             this.positions.push(position);
+            
+            if (isAboveBase) {
+                console.log(`⬆️ 网格${index}(${gridPrice.toFixed(2)}): 持有$${usdtPerGrid.toFixed(2)}USDT, 等待买入@$${position.buyPrice.toFixed(2)}`);
+            } else {
+                console.log(`⬇️ 网格${index}(${gridPrice.toFixed(2)}): 持有${ethPerGrid.toFixed(6)}ETH, 等待卖出@$${position.sellPrice.toFixed(2)}`);
+            }
         });
         
         console.log(`\n🎯 网格交易初始化完成！`);
-        console.log(`基准价格以下网格已买入ETH，以上网格等待下跌买入`);
-        console.log(`剩余余额: $${this.balance.toLocaleString()}`);
+        console.log(`策略：高抛低吸，基准价以下持有ETH等待上涨卖出，以上持有USDT等待下跌买入`);
+    }
+    
+    /**
+     * 计算网格的卖出价格
+     */
+    calculateSellPrice(gridPrice) {
+        const gridSpacing = (this.gridLevels[1] - this.gridLevels[0]) || 
+                           (this.basePrice * Math.abs(this.config.upperBound - this.config.lowerBound) / 100 / (this.config.gridCount - 1));
+        return gridPrice + gridSpacing;
+    }
+    
+    /**
+     * 计算网格的买入价格  
+     */
+    calculateBuyPrice(gridPrice) {
+        const gridSpacing = (this.gridLevels[1] - this.gridLevels[0]) || 
+                           (this.basePrice * Math.abs(this.config.upperBound - this.config.lowerBound) / 100 / (this.config.gridCount - 1));
+        return gridPrice - gridSpacing;
     }
     
     /**
@@ -265,104 +267,52 @@ class GridStrategy {
     }
 
     /**
-     * 判断是否应该买入 - 网格补仓逻辑
-     * 🔧 当卖出后，在更低价位补仓买入
+     * 判断是否应该买入 - 网格低吸逻辑
+     * 🔧 价格下跌到买入价位时，用USDT买入ETH
      * @param {number} currentPrice - 当前价格
      * @param {number} gridPrice - 网格价格
      * @param {Object} position - 持仓信息
      * @returns {boolean}
      */
     shouldBuy(currentPrice, gridPrice, position) {
-        // 🐛 详细调试：记录每次shouldBuy的调用
-        const isLowestGrid = position.gridIndex === 0;
-        
-        // 只有卖出后的网格才需要补仓
-        if (position.status !== 'waiting' || this.balance < position.allocated) {
-            if (isLowestGrid && position.status === 'waiting') {
-                console.log(`🔍 最低网格${position.gridIndex}跳过买入检查: status=${position.status}, balance=${this.balance.toFixed(2)}, allocated=${position.allocated}`);
-            }
+        // 只有持有USDT等待买入的网格才能买入
+        if (position.status !== 'waiting_buy' || position.usdtAmount <= 0) {
             return false;
         }
         
-        // 🐛 详细调试：最低网格的买入检查
-        if (isLowestGrid) {
-            console.log(`🔍 最低网格${position.gridIndex}买入检查:`);
-            console.log(`   当前价格: $${currentPrice.toFixed(2)}`);
-            console.log(`   网格价格: $${gridPrice.toFixed(2)}`);
-            console.log(`   可用余额: $${this.balance.toFixed(2)}`);
-            console.log(`   持仓状态: ${position.status}`);
-        }
-        
-        // 🎯 纯参数驱动：只按网格价格和挂单逻辑执行
-        
-        // 🎯 网格交易核心：价格回落到网格价位时补仓
-        const tolerance = gridPrice * 0.002; // 0.2%容差
-        const effectivePrice = gridPrice + tolerance;
+        // 🎯 买入触发：价格下跌到买入价位
+        const tolerance = position.buyPrice * 0.002; // 0.2%容差
+        const effectivePrice = position.buyPrice + tolerance;
         const shouldBuyResult = currentPrice <= effectivePrice;
         
-        // 🐛 详细调试：买入条件判断
-        if (isLowestGrid) {
-            console.log(`   有效触发价: $${effectivePrice.toFixed(2)} (原价+0.2%容差)`);
-            console.log(`   是否应该买入: ${shouldBuyResult} (${currentPrice.toFixed(2)} <= ${effectivePrice.toFixed(2)})`);
-        }
-        
         if (shouldBuyResult) {
-            console.log(`✅ 网格${position.gridIndex}补仓买入: 价格$${currentPrice.toFixed(2)} ≤ 网格$${gridPrice.toFixed(2)}`);
+            console.log(`📉 网格${position.gridIndex}买入触发: 价格$${currentPrice.toFixed(2)} ≤ 买入价$${position.buyPrice.toFixed(2)}`);
         }
         
         return shouldBuyResult;
     }
 
     /**
-     * 判断是否应该卖出 - 网格挂单卖出逻辑
-     * 🔧 纯挂单系统：价格触及卖出价位时执行卖出挂单
+     * 判断是否应该卖出 - 网格高抛逻辑
+     * 🔧 价格上涨到卖出价位时，卖出ETH获得USDT
      * @param {number} currentPrice - 当前价格
      * @param {number} gridIndex - 网格索引
      * @param {Object} position - 持仓信息
      * @returns {boolean}
      */
     shouldSell(currentPrice, gridIndex, position) {
-        // 🐛 详细调试：记录每次shouldSell的调用
-        const isLastGrid = gridIndex === this.gridLevels.length - 1;
-        
-        if (position.status !== 'bought' || position.quantity <= 0) {
-            if (isLastGrid) {
-                console.log(`🔍 最高网格${gridIndex}跳过卖出检查: status=${position.status}, quantity=${position.quantity}`);
-            }
+        // 只有持有ETH的网格才能卖出
+        if (position.status !== 'holding_eth' || position.ethAmount <= 0) {
             return false;
         }
         
-        // 🎯 网格交易核心：使用预设的卖出价位
-        const targetSellPrice = position.sellPrice;
-        
-        // 🎯 所有网格都应该有sellPrice，如果没有则为配置错误
-        if (!targetSellPrice) {
-            console.error(`❌ 网格${position.gridIndex}没有设置卖出价格，这是配置错误！`);
-            return false;
-        }
-        
-        // 🐛 详细调试：最高网格的卖出检查
-        if (isLastGrid) {
-            console.log(`🔍 最高网格${gridIndex}卖出检查:`);
-            console.log(`   当前价格: $${currentPrice.toFixed(2)}`);
-            console.log(`   卖出价格: $${targetSellPrice.toFixed(2)}`);
-            console.log(`   持仓数量: ${position.quantity.toFixed(6)}ETH`);
-            console.log(`   持仓状态: ${position.status}`);
-        }
-        
-        // 价格触及卖出挂单价位时执行
-        const tolerance = targetSellPrice * 0.002; // 0.2%容差，模拟挂单成交
-        const effectivePrice = targetSellPrice - tolerance;
+        // 🎯 卖出触发：价格上涨到卖出价位
+        const tolerance = position.sellPrice * 0.002; // 0.2%容差
+        const effectivePrice = position.sellPrice - tolerance;
         const shouldSellResult = currentPrice >= effectivePrice;
         
-        // 🐛 详细调试：卖出条件判断
-        if (isLastGrid) {
-            console.log(`   有效触发价: $${effectivePrice.toFixed(2)} (原价-0.2%容差)`);
-            console.log(`   是否应该卖出: ${shouldSellResult} (${currentPrice.toFixed(2)} >= ${effectivePrice.toFixed(2)})`);
-        }
-        
         if (shouldSellResult) {
-            console.log(`✅ 网格${gridIndex}卖出挂单执行: 价格$${currentPrice.toFixed(2)} ≥ 卖出价$${targetSellPrice.toFixed(2)}`);
+            console.log(`📈 网格${gridIndex}卖出触发: 价格$${currentPrice.toFixed(2)} ≥ 卖出价$${position.sellPrice.toFixed(2)}`);
         }
         
         return shouldSellResult;
@@ -378,39 +328,42 @@ class GridStrategy {
         const position = this.positions[gridIndex];
         const price = candle.close;
         
-        // 修正杠杆交易逻辑
-        const margin = position.allocated; // 保证金 = 分配的资金
-        const investAmount = margin * this.config.leverage; // 实际投资金额 = 保证金 × 杠杆
-        const quantity = investAmount / price;
-        const fee = margin * this.config.feeRate; // 手续费基于保证金，不是投资金额
-
-        // 检查余额是否充足（只需要保证金+手续费）
-        if (this.balance < margin + fee) {
+        // 用该网格的USDT买入ETH
+        const usdtToSpend = position.usdtAmount;
+        const leveragedAmount = usdtToSpend * this.config.leverage;
+        const ethQuantity = leveragedAmount / price;
+        const fee = usdtToSpend * this.config.feeRate;
+        
+        // 检查是否有足够的USDT
+        if (position.usdtAmount <= 0) {
+            console.log(`❌ 网格${gridIndex}买入失败: 没有USDT可用`);
             return null;
         }
-
-        // 更新持仓
-        position.quantity = quantity;
-        position.status = 'bought';
-        position.buyPrice = price;
+        
+        // 更新持仓：USDT转为ETH
+        position.ethAmount = ethQuantity;
+        position.usdtAmount = 0;
+        position.status = 'holding_eth';
+        position.actualBuyPrice = price;
         position.buyTime = candle.timestamp;
         
-        // 从余额中只扣除保证金和手续费（杠杆交易的核心）
-        this.balance -= (margin + fee);
+        // 扣除手续费
+        this.balance -= fee;
         
         const trade = {
             type: 'buy',
             timestamp: candle.timestamp,
             price: price,
-            quantity: quantity,
-            amount: investAmount, // 实际投资金额（杠杆后）
-            margin: margin, // 保证金
+            quantity: ethQuantity,
+            amount: leveragedAmount,
+            margin: usdtToSpend,
             fee: fee,
             gridIndex: gridIndex,
             balance: this.balance
         };
         
         this.orders.push(trade);
+        console.log(`🟢 执行买入: 网格${gridIndex}用$${usdtToSpend.toFixed(2)}USDT买入${ethQuantity.toFixed(6)}ETH@$${price.toFixed(2)}`);
         return trade;
     }
 
@@ -423,45 +376,36 @@ class GridStrategy {
     executeSell(gridIndex, candle) {
         const position = this.positions[gridIndex];
         const sellPrice = candle.close;
-        const sellAmount = position.quantity * sellPrice;
-        const sellFee = sellAmount * this.config.feeRate;
-        const netAmount = sellAmount - sellFee;
         
-        // 计算利润 - 杠杆交易的正确利润计算
-        const buyAmount = position.quantity * position.buyPrice; // 成本基础
-        const priceChange = sellPrice - position.buyPrice; // 价格变化
-        const grossProfit = priceChange * position.quantity; // 毛利润
+        // 卖出该网格的ETH获得USDT
+        const ethToSell = position.ethAmount;
+        const sellAmount = ethToSell * sellPrice;
+        const fee = sellAmount * this.config.feeRate;
+        const netUSDT = sellAmount - fee;
         
-        // 获取买入时的手续费（从交易记录中找到对应的买入记录）
-        const buyTrade = this.orders.find(order => 
-            order.type === 'buy' && 
-            order.gridIndex === gridIndex && 
-            Math.abs(order.price - position.buyPrice) < 0.01
-        );
-        const buyFee = buyTrade ? buyTrade.fee : 0;
+        // 计算本次交易利润
+        const costBasis = ethToSell * (position.actualBuyPrice || this.basePrice);
+        const grossProfit = sellAmount - costBasis;
+        const netProfit = grossProfit - fee;
+        const profitPct = costBasis > 0 ? netProfit / costBasis : 0;
         
-        const totalProfit = grossProfit - buyFee - sellFee; // 净利润 = 毛利润 - 买入手续费 - 卖出手续费
-        const profitPct = buyAmount > 0 ? totalProfit / buyAmount : 0;
-        
-        // 更新持仓
-        const soldQuantity = position.quantity; // 保存卖出数量
-        position.quantity = 0;
-        position.status = 'waiting';
+        // 更新持仓：ETH转为USDT
+        position.usdtAmount = netUSDT;
+        position.ethAmount = 0;
+        position.status = 'waiting_buy';
         position.sellPrice = sellPrice;
         position.sellTime = candle.timestamp;
-        position.sellFee = sellFee; // 记录卖出手续费
         
-        // 更新余额 - 增加净收入
-        this.balance += netAmount;
+        // 手续费已经从netUSDT中扣除，无需额外扣除balance
         
         const trade = {
             type: 'sell',
             timestamp: candle.timestamp,
             price: sellPrice,
-            quantity: soldQuantity, // 使用保存的数量
+            quantity: ethToSell,
             amount: sellAmount,
-            fee: sellFee,
-            profit: totalProfit, // 使用修正后的利润
+            fee: fee,
+            profit: netProfit,
             profitPct: profitPct,
             gridIndex: gridIndex,
             balance: this.balance,
@@ -469,6 +413,7 @@ class GridStrategy {
         };
         
         this.orders.push(trade);
+        console.log(`🔴 执行卖出: 网格${gridIndex}卖出${ethToSell.toFixed(6)}ETH@$${sellPrice.toFixed(2)}获得$${netUSDT.toFixed(2)}USDT，利润$${netProfit.toFixed(2)}`);
         return trade;
     }
 
@@ -478,41 +423,22 @@ class GridStrategy {
      * @returns {number} 总资产价值
      */
     calculateTotalValue(currentPrice) {
-        let netPositionValue = 0;
-        let totalPositions = 0;
-        
-        // 🐛 添加调试：检查网格边界
-        const upperBound = this.gridLevels[this.gridLevels.length - 1];
-        const isAboveGrid = currentPrice > upperBound;
+        let totalETHValue = 0;
+        let totalUSDTValue = this.balance;
         
         this.positions.forEach(position => {
-            if (position.status === 'bought' && position.quantity > 0) {
-                totalPositions++;
-                const currentValue = position.quantity * currentPrice;
-                
-                // 🚨 关键调试：如果价格超出网格边界但还有持仓，这就是问题所在！
-                if (isAboveGrid) {
-                    console.log(`🚨 calculateTotalValue警告: 价格$${currentPrice.toFixed(2)}超出网格上边界$${upperBound.toFixed(2)}, 但网格${position.gridIndex}仍有${position.quantity.toFixed(6)}ETH持仓！`);
-                    console.log(`   持仓价值: $${currentValue.toLocaleString()}, 买入价: $${position.buyPrice}`);
-                }
-                
-                // 杠杆交易中，需要考虑借入资金的成本
-                if (this.config.leverage > 1) {
-                    const positionCost = position.quantity * position.buyPrice;
-                    const borrowedAmount = positionCost * (this.config.leverage - 1) / this.config.leverage;
-                    netPositionValue += (currentValue - borrowedAmount);
-                } else {
-                    netPositionValue += currentValue;
-                }
+            // ETH持仓价值
+            if (position.ethAmount > 0) {
+                totalETHValue += position.ethAmount * currentPrice;
+            }
+            
+            // USDT持仓价值
+            if (position.usdtAmount > 0) {
+                totalUSDTValue += position.usdtAmount;
             }
         });
         
-        // 🐛 调试日志：总结持仓状态
-        if (isAboveGrid && totalPositions > 0) {
-            console.log(`🚨 异常状态总结: 价格突破网格但仍有${totalPositions}个持仓，总价值$${netPositionValue.toLocaleString()}`);
-        }
-        
-        return this.balance + netPositionValue;
+        return totalETHValue + totalUSDTValue;
     }
 
     /**
@@ -524,9 +450,10 @@ class GridStrategy {
         let unrealizedPnL = 0;
         
         this.positions.forEach(position => {
-            if (position.status === 'bought' && position.quantity > 0) {
-                const currentValue = position.quantity * currentPrice;
-                const costBasis = position.quantity * (position.actualBuyPrice || position.buyPrice);
+            // 只计算ETH持仓的未实现盈亏
+            if (position.ethAmount > 0) {
+                const currentValue = position.ethAmount * currentPrice;
+                const costBasis = position.ethAmount * (position.actualBuyPrice || this.basePrice);
                 unrealizedPnL += currentValue - costBasis;
             }
         });
@@ -560,9 +487,9 @@ class GridStrategy {
         let holdingProfit = 0;
         const currentPrice = equity.length > 0 ? equity[equity.length - 1].price : this.basePrice;
         this.positions.forEach(position => {
-            if (position.status === 'bought' && position.quantity > 0) {
-                const cost = position.quantity * (position.actualBuyPrice || position.buyPrice);
-                const currentVal = position.quantity * currentPrice;
+            if (position.ethAmount > 0) {
+                const cost = position.ethAmount * (position.actualBuyPrice || this.basePrice);
+                const currentVal = position.ethAmount * currentPrice;
                 holdingProfit += (currentVal - cost);
             }
         });
@@ -723,16 +650,16 @@ class GridStrategy {
         
         console.log(`\n🔍 检查当前持仓状态:`);
         this.positions.forEach((position, index) => {
-            if (position.status === 'bought' && position.quantity > 0) {
-                const actualBuyPrice = position.actualBuyPrice || position.buyPrice;
-                const cost = position.quantity * actualBuyPrice;
-                const currentVal = position.quantity * currentPrice;
+            if (position.ethAmount > 0) {
+                const actualBuyPrice = position.actualBuyPrice || this.basePrice;
+                const cost = position.ethAmount * actualBuyPrice;
+                const currentVal = position.ethAmount * currentPrice;
                 positionCost += cost;
                 holdingProfit += (currentVal - cost);
                 activePositions++;
                 
                 if (activePositions <= 5) { // 显示前5个持仓
-                    console.log(`持仓${index}: ${position.quantity.toFixed(6)}ETH, 成本$${actualBuyPrice.toFixed(2)}, 当前值$${currentVal.toLocaleString()}`);
+                    console.log(`持仓${index}: ${position.ethAmount.toFixed(6)}ETH, 成本$${actualBuyPrice.toFixed(2)}, 当前值$${currentVal.toLocaleString()}`);
                 }
             }
         });
@@ -759,7 +686,7 @@ class GridStrategy {
                 currentPrice: currentPrice,
                 positionCost: positionCost,
                 gridTradeCount: this.orders.filter(o => o.type === 'sell').length,
-                activePositions: this.positions.filter(p => p.status === 'bought').length,
+                activePositions: this.positions.filter(p => p.ethAmount > 0).length,
                 calculationVerification: {
                     realizedProfit: gridTradingProfit,
                     holdingProfit: holdingProfit,
