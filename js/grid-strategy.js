@@ -3,7 +3,7 @@
  * 🔧 已修复核心买入卖出逻辑错误
  */
 
-console.log('🚀 GridStrategy修复版本已加载 - v20250722-fix');
+console.log('🚀 GridStrategy网格间距版本已加载 - v20250722-grid-spacing');
 
 class GridStrategy {
     constructor(config) {
@@ -248,14 +248,15 @@ class GridStrategy {
             return false;
         }
         
-        // 🎯 网格交易买入逻辑：只买入低于基准价的网格
-        // 高于基准价的网格已在初始化时购买，这里只处理补仓
+        // 🎯 网格交易买入逻辑：完全基于用户设置的网格参数
+        // 只有当价格下跌到网格价位时才买入
+        
         if (gridPrice >= this.basePrice) {
-            return false; // 高价网格不在此处购买
+            return false; // 高于基准价的网格已在初始化时购买
         }
         
-        // 价格下跌到网格价位附近时买入
-        const tolerance = gridPrice * 0.002; // 0.2%容差
+        // 价格触达网格价位时买入
+        const tolerance = gridPrice * 0.005; // 0.5%容差，与卖出保持一致
         const shouldBuyResult = currentPrice <= gridPrice + tolerance;
         
         if (shouldBuyResult) {
@@ -291,39 +292,32 @@ class GridStrategy {
             return false;
         }
         
-        // 🎯 真正的网格交易卖出逻辑 - 基于网格间距
-        const lowerPrice = this.gridLevels[0];
-        const upperPrice = this.gridLevels[this.gridLevels.length - 1];
-        const gridSpacing = (upperPrice - lowerPrice) / (this.gridLevels.length - 1);
+        // 🎯 真正的网格交易卖出逻辑 - 完全基于用户参数设置
+        const currentGridPrice = this.gridLevels[gridIndex];
         
-        const gridPrice = this.gridLevels[gridIndex];
-        const buyPrice = position.buyPrice;
+        // 🔧 核心原则：只能在设定的价格区间内进行网格交易
+        // 超出区间的持仓应该等待价格回到区间内
         
-        // 🔧 核心修复：卖出目标基于网格间距，而非固定百分比
-        let targetSellPrice;
-        
-        if (buyPrice >= this.basePrice) {
-            // 初始购买的高价网格：当价格上涨一个网格间距时卖出
-            targetSellPrice = buyPrice + gridSpacing;
-        } else {
-            // 补仓的低价网格：当价格回升到下一个网格时卖出
-            // 找到当前网格上方的下一个网格价格
-            let nextGridPrice = gridPrice + gridSpacing;
-            
-            // 如果没有上方网格，使用买入价+网格间距
-            if (gridIndex >= this.gridLevels.length - 1) {
-                nextGridPrice = buyPrice + gridSpacing;
-            }
-            
-            targetSellPrice = nextGridPrice;
+        // 寻找当前网格上方最近的网格作为卖出目标
+        let targetGridIndex = -1;
+        for (let i = gridIndex + 1; i < this.gridLevels.length; i++) {
+            targetGridIndex = i;
+            break; // 找到第一个上方网格就停止
         }
         
-        // 添加小幅容差，避免价格波动错失机会
-        const tolerance = targetSellPrice * 0.002; // 0.2%容差
+        // 如果没有上方网格（已经是最高网格），则不卖出
+        if (targetGridIndex === -1) {
+            return false;
+        }
+        
+        const targetSellPrice = this.gridLevels[targetGridIndex];
+        
+        // 添加容差
+        const tolerance = targetSellPrice * 0.005; // 0.5%容差
         const shouldSellResult = currentPrice >= targetSellPrice - tolerance;
         
         if (shouldSellResult) {
-            console.log(`✅ shouldSell: 网格${gridIndex}，价格$${currentPrice.toFixed(2)}达到目标$${targetSellPrice.toFixed(2)} (网格间距$${gridSpacing.toFixed(2)})`);
+            console.log(`✅ shouldSell: 网格${gridIndex}(${currentGridPrice.toFixed(2)}) → 目标网格${targetGridIndex}($${targetSellPrice.toFixed(2)})`);
         }
         
         return shouldSellResult;
