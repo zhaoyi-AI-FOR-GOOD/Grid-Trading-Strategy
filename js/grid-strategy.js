@@ -3,7 +3,7 @@
  * 🔧 已修复核心买入卖出逻辑错误
  */
 
-console.log('🚀 GridStrategy完全重构版本已加载 - v20250722-complete-refactor');
+console.log('🚀 GridStrategy数学验证版本已加载 - v20250722-math-validation');
 
 class GridStrategy {
     constructor(config) {
@@ -669,6 +669,9 @@ class GridStrategy {
         console.log(`持仓浮盈浮亏: $${holdingProfit.toLocaleString()}`);
         console.log(`已实现利润: $${gridTradingProfit.toLocaleString()}`);
         
+        // 🔍 验证网格交易利润的数学关系
+        this.validateGridTradingMath(gridTradingProfit);
+        
         // 🔧 修复：使用真实的交易利润，不包含投入本金
         const realTotalProfit = gridTradingProfit + holdingProfit;
         
@@ -694,6 +697,75 @@ class GridStrategy {
                     isValid: Math.abs(realTotalProfit - (gridTradingProfit + holdingProfit)) < 0.01
                 }
             }
+        };
+    }
+    
+    /**
+     * 验证网格交易数学关系
+     * @param {number} totalGridProfit - 总网格交易利润
+     */
+    validateGridTradingMath(totalGridProfit) {
+        console.log(`\n🔍 网格交易数学验证:`);
+        
+        const sellOrders = this.orders.filter(o => o.type === 'sell');
+        const totalTrades = sellOrders.length;
+        
+        if (totalTrades === 0) {
+            console.log(`❌ 没有交易记录，无法验证`);
+            return;
+        }
+        
+        // 计算每笔交易的利润
+        let manualTotalProfit = 0;
+        let profitDetails = [];
+        
+        sellOrders.forEach((trade, index) => {
+            manualTotalProfit += trade.profit;
+            profitDetails.push({
+                trade: index + 1,
+                gridIndex: trade.gridIndex,
+                profit: trade.profit,
+                price: trade.price,
+                quantity: trade.quantity
+            });
+        });
+        
+        // 计算平均单格利润
+        const avgProfitPerTrade = manualTotalProfit / totalTrades;
+        
+        console.log(`总交易次数: ${totalTrades}次`);
+        console.log(`手动计算总利润: $${manualTotalProfit.toFixed(2)}`);
+        console.log(`系统计算总利润: $${totalGridProfit.toFixed(2)}`);
+        console.log(`平均单格利润: $${avgProfitPerTrade.toFixed(2)}`);
+        
+        // 验证数学关系
+        const difference = Math.abs(manualTotalProfit - totalGridProfit);
+        const isValid = difference < 0.01;
+        
+        console.log(`\n🔍 数学验证结果:`);
+        console.log(`手动计算 vs 系统计算差异: $${difference.toFixed(2)}`);
+        console.log(`验证结果: ${isValid ? '✅ 匹配' : '❌ 不匹配'}`);
+        
+        if (!isValid) {
+            console.log(`\n⚠️ 发现利润计算错误！`);
+            console.log(`预期：总利润 = 单格平均利润 × 交易次数`);
+            console.log(`预期：$${totalGridProfit.toFixed(2)} = $${avgProfitPerTrade.toFixed(2)} × ${totalTrades}`);
+            console.log(`实际：$${manualTotalProfit.toFixed(2)} ≠ $${totalGridProfit.toFixed(2)}`);
+        }
+        
+        // 显示前5笔交易详情
+        console.log(`\n📊 交易详情（前5笔）:`);
+        profitDetails.slice(0, 5).forEach(detail => {
+            console.log(`  交易${detail.trade}: 网格${detail.gridIndex}, 利润$${detail.profit.toFixed(2)}, 价格$${detail.price.toFixed(2)}`);
+        });
+        
+        return {
+            isValid,
+            totalTrades,
+            manualTotalProfit,
+            systemTotalProfit: totalGridProfit,
+            avgProfitPerTrade,
+            difference
         };
     }
 }
