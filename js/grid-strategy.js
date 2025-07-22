@@ -677,8 +677,9 @@ class GridStrategy {
         // 🔍 验证网格交易利润的数学关系
         this.validateGridTradingMath(gridTradingProfit);
         
-        // 🔧 修复：使用真实的交易利润，不包含投入本金
-        const realTotalProfit = gridTradingProfit + holdingProfit;
+        // 🔧 修复：总利润应该等于当前总价值减去初始投资
+        // 这样确保与calculateTotalValue()的结果一致
+        const realTotalProfit = totalProfit; // 使用最开始计算的totalProfit
         
         return {
             gridTradingProfit: gridTradingProfit,

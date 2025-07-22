@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Debug Test</title>
+</head>
+<body>
+    <h1>Debug Test Console</h1>
+    <button onclick="runDebugTest()">Run Debug Tests</button>
+    <div id="output"></div>
+
+    <script src="js/grid-strategy.js?v=20250722-math-validation"></script>
+    
+    <script>
+        async function runDebugTest() {
+            const output = document.getElementById('output');
+            output.innerHTML = '<h2>运行中...</h2>';
+            
+            try {
+                let results = [];
+                
+                // Test 1: 资金守恒
+                console.log('🧪 测试资金守恒...');
+                const strategy1 = new GridStrategy({
+                    initialCapital: 1000000,
+                    lowerBound: -10,
+                    upperBound: 10,
+                    gridCount: 25,
+                    leverage: 2
+                });
+                
+                const mockData = [{ close: 2000, timestamp: Date.now() }];
+                strategy1.initialize(mockData);
+                
+                let totalETH = 0;
+                let totalUSDT = strategy1.balance;
+                
+                strategy1.positions.forEach(position => {
+                    totalETH += position.ethAmount || 0;
+                    totalUSDT += position.usdtAmount || 0;
+                });
+                
+                const totalValue = totalETH * 2000 + totalUSDT;
+                const difference1 = Math.abs(totalValue - 1000000);
+                const test1Pass = difference1 < 1000;
+                
+                results.push(`资金守恒: ${test1Pass ? '✅' : '❌'} (差异: $${difference1.toFixed(2)})`);
+                console.log(`资金守恒差异: $${difference1.toFixed(2)}`);
+                
+                // Test 2: 无交易情况  
+                console.log('🧪 测试无交易情况...');
+                const strategy2 = new GridStrategy({
+                    initialCapital: 1000000,
+                    gridCount: 10,
+                    lowerBound: -10,
+                    upperBound: 10
+                });
+                
+                const noTradeData = [
+                    { close: 2000, timestamp: 1000 },
+                    { close: 2000, timestamp: 2000 },
+                    { close: 2000, timestamp: 3000 }
+                ];
+                
+                strategy2.initialize(noTradeData);
+                const result2 = strategy2.execute(noTradeData);
+                const test2Pass = result2.trades.length === 0;
+                
+                results.push(`无交易情况: ${test2Pass ? '✅' : '❌'} (交易数: ${result2.trades.length})`);
+                console.log(`无交易测试 - 交易数: ${result2.trades.length}`);
+                
+                // Test 3: 基本计算验证
+                console.log('🧪 测试基本计算...');
+                const strategy3 = new GridStrategy({
+                    initialCapital: 500000,
+                    gridCount: 10,
+                    lowerBound: -10,
+                    upperBound: 10,
+                    feeRate: 0
+                });
+                
+                const testData = [
+                    { close: 2000, timestamp: 1000 },
+                    { close: 2100, timestamp: 2000 },
+                    { close: 2000, timestamp: 3000 }
+                ];
+                
+                strategy3.initialize(testData);
+                const result3 = strategy3.execute(testData);
+                const finalValue3 = strategy3.calculateTotalValue(2000);
+                const profit3 = finalValue3 - 500000;
+                
+                results.push(`基本计算: 初始$500000 → 最终$${finalValue3.toFixed(2)} (利润: $${profit3.toFixed(2)})`);
+                
+                output.innerHTML = `
+                    <h2>🧪 Debug 测试结果</h2>
+                    <ul>
+                        ${results.map(r => `<li>${r}</li>`).join('')}
+                    </ul>
+                    <p>请查看控制台获取详细日志</p>
+                `;
+                
+            } catch (error) {
+                console.error('测试失败:', error);
+                output.innerHTML = `<h2>❌ 测试失败</h2><p>${error.message}</p>`;
+            }
+        }
+    </script>
+</body>
+</html>
