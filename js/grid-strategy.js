@@ -215,12 +215,15 @@ class GridStrategy {
     executeBuy(gridIndex, candle) {
         const position = this.positions[gridIndex];
         const price = candle.close;
-        const investAmount = position.allocated * this.config.leverage;
+        
+        // 修正杠杆交易逻辑
+        const margin = position.allocated; // 保证金 = 分配的资金
+        const investAmount = margin * this.config.leverage; // 实际投资金额 = 保证金 × 杠杆
         const quantity = investAmount / price;
-        const fee = investAmount * this.config.feeRate;
+        const fee = margin * this.config.feeRate; // 手续费基于保证金，不是投资金额
 
-        // 检查余额是否充足
-        if (this.balance < investAmount + fee) {
+        // 检查余额是否充足（只需要保证金+手续费）
+        if (this.balance < margin + fee) {
             return null;
         }
 
@@ -230,15 +233,16 @@ class GridStrategy {
         position.buyPrice = price;
         position.buyTime = candle.timestamp;
         
-        // 从余额中扣除投资金额和手续费
-        this.balance -= (investAmount + fee);
+        // 从余额中只扣除保证金和手续费（杠杆交易的核心）
+        this.balance -= (margin + fee);
         
         const trade = {
             type: 'buy',
             timestamp: candle.timestamp,
             price: price,
             quantity: quantity,
-            amount: investAmount,
+            amount: investAmount, // 实际投资金额（杠杆后）
+            margin: margin, // 保证金
             fee: fee,
             gridIndex: gridIndex,
             balance: this.balance
@@ -261,10 +265,21 @@ class GridStrategy {
         const sellFee = sellAmount * this.config.feeRate;
         const netAmount = sellAmount - sellFee;
         
-        // 计算利润 - 只需考虑卖出手续费，买入手续费已在买入时扣除
-        const buyAmount = position.quantity * position.buyPrice;
-        const totalProfit = sellAmount - buyAmount - sellFee;
-        const profitPct = totalProfit / buyAmount;
+        // 计算利润 - 杠杆交易的正确利润计算
+        const buyAmount = position.quantity * position.buyPrice; // 成本基础
+        const priceChange = sellPrice - position.buyPrice; // 价格变化
+        const grossProfit = priceChange * position.quantity; // 毛利润
+        
+        // 获取买入时的手续费（从交易记录中找到对应的买入记录）
+        const buyTrade = this.orders.find(order => 
+            order.type === 'buy' && 
+            order.gridIndex === gridIndex && 
+            Math.abs(order.price - position.buyPrice) < 0.01
+        );
+        const buyFee = buyTrade ? buyTrade.fee : 0;
+        
+        const totalProfit = grossProfit - buyFee - sellFee; // 净利润 = 毛利润 - 买入手续费 - 卖出手续费
+        const profitPct = buyAmount > 0 ? totalProfit / buyAmount : 0;
         
         // 更新持仓
         const soldQuantity = position.quantity; // 保存卖出数量
@@ -301,15 +316,26 @@ class GridStrategy {
      * @returns {number} 总资产价值
      */
     calculateTotalValue(currentPrice) {
-        let positionValue = 0;
+        let netPositionValue = 0;
         
         this.positions.forEach(position => {
             if (position.status === 'bought' && position.quantity > 0) {
-                positionValue += position.quantity * currentPrice;
+                const currentValue = position.quantity * currentPrice; // 当前市值
+                
+                // 杠杆交易中，需要考虑借入资金的成本
+                if (this.config.leverage > 1) {
+                    // 借入金额 = 持仓成本 × (杠杆-1) / 杠杆
+                    const positionCost = position.quantity * position.buyPrice;
+                    const borrowedAmount = positionCost * (this.config.leverage - 1) / this.config.leverage;
+                    netPositionValue += (currentValue - borrowedAmount);
+                } else {
+                    // 1倍杠杆时无借入资金
+                    netPositionValue += currentValue;
+                }
             }
         });
         
-        return this.balance + positionValue;
+        return this.balance + netPositionValue;
     }
 
     /**
