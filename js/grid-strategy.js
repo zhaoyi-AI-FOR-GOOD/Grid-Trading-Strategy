@@ -179,6 +179,16 @@ class GridStrategy {
      */
     shouldBuy(currentPrice, gridPrice, position) {
         const tolerance = gridPrice * 0.001; // 0.1% 容差
+        
+        // 检查价格是否在网格范围内
+        const lowerBound = this.gridLevels[0];
+        const upperBound = this.gridLevels[this.gridLevels.length - 1];
+        
+        // 价格必须在网格范围内才能买入
+        if (currentPrice < lowerBound || currentPrice > upperBound) {
+            return false;
+        }
+        
         return currentPrice <= gridPrice + tolerance && 
                position.status === 'waiting' && 
                this.balance >= position.allocated;
@@ -196,7 +206,21 @@ class GridStrategy {
             return false;
         }
         
-        // 寻找上一个网格价格
+        // 检查价格是否在网格范围内
+        const lowerBound = this.gridLevels[0];
+        const upperBound = this.gridLevels[this.gridLevels.length - 1];
+        
+        // 如果价格突破上边界，立即卖出所有持仓
+        if (currentPrice > upperBound) {
+            return true;
+        }
+        
+        // 如果价格突破下边界，不卖出（持有等待反弹）
+        if (currentPrice < lowerBound) {
+            return false;
+        }
+        
+        // 在网格范围内，按正常网格逻辑卖出
         if (gridIndex < this.gridLevels.length - 1) {
             const upperGridPrice = this.gridLevels[gridIndex + 1];
             const tolerance = upperGridPrice * 0.001;
