@@ -806,26 +806,39 @@ class ETHGridBacktestApp {
      * @param {Object} testReport - 测试报告
      */
     displayTestResults(testReport) {
+        // 确保testReport是有效的对象
+        if (!testReport || typeof testReport !== 'object') {
+            this.showTestError('测试报告数据无效');
+            return;
+        }
+        
+        // 设置默认值以防某些属性未定义
+        const total = testReport.total || 0;
+        const passed = testReport.passed || 0;
+        const failed = testReport.failed || 0;
+        const successRate = testReport.successRate || 0;
+        const details = testReport.details || [];
+        
         const summaryHtml = `
             <div class="test-summary-cards">
-                <div class="test-card ${testReport.failed === 0 ? 'success' : 'failure'}">
+                <div class="test-card ${failed === 0 ? 'success' : 'failure'}">
                     <h4>测试总览</h4>
                     <div class="test-stats">
                         <div class="stat-item">
                             <span class="stat-label">总测试数:</span>
-                            <span class="stat-value">${testReport.total}</span>
+                            <span class="stat-value">${total}</span>
                         </div>
                         <div class="stat-item">
                             <span class="stat-label">通过:</span>
-                            <span class="stat-value success-text">${testReport.passed} ✅</span>
+                            <span class="stat-value success-text">${passed} ✅</span>
                         </div>
                         <div class="stat-item">
                             <span class="stat-label">失败:</span>
-                            <span class="stat-value ${testReport.failed > 0 ? 'failure-text' : ''}">${testReport.failed} ${testReport.failed > 0 ? '❌' : '✅'}</span>
+                            <span class="stat-value ${failed > 0 ? 'failure-text' : ''}">${failed} ${failed > 0 ? '❌' : '✅'}</span>
                         </div>
                         <div class="stat-item">
                             <span class="stat-label">成功率:</span>
-                            <span class="stat-value ${testReport.successRate === 100 ? 'success-text' : 'warning-text'}">${testReport.successRate.toFixed(1)}%</span>
+                            <span class="stat-value ${successRate === 100 ? 'success-text' : 'warning-text'}">${successRate.toFixed(1)}%</span>
                         </div>
                     </div>
                 </div>
@@ -833,11 +846,11 @@ class ETHGridBacktestApp {
         `;
 
         let detailsHtml = '';
-        if (testReport.failed > 0) {
+        if (failed > 0) {
             detailsHtml = `
                 <div class="test-failures">
                     <h4>❌ 失败测试详情</h4>
-                    ${testReport.details
+                    ${details
                         .filter(test => test.status === 'FAIL')
                         .map(test => `
                             <div class="failure-item">

@@ -91,57 +91,62 @@ class GridStrategy {
         console.log(`网格数量: ${this.config.gridCount}`);
         console.log(`杠杆倍数: ${this.config.leverage}x`);
         
-        // 🎯 步骤1：用50%资金在基准价格买入ETH
-        const initialInvestmentRatio = 0.5; // 50%资金买ETH，50%保留USDT
-        const initialInvestment = this.config.initialCapital * initialInvestmentRatio;
-        const initialETHAmount = (initialInvestment * this.config.leverage) / this.basePrice;
-        const initialFee = initialInvestment * this.config.feeRate;
-        
-        // 扣除初始投资和手续费
-        this.balance -= (initialInvestment + initialFee);
-        this.totalETHHoldings = initialETHAmount;
-        
-        console.log(`\n💰 初始投资:`);
-        console.log(`投资金额: $${initialInvestment.toLocaleString()} (50%资金)`);
-        console.log(`购买ETH: ${initialETHAmount.toFixed(6)}ETH @ $${this.basePrice.toFixed(2)}`);
-        console.log(`手续费: $${initialFee.toLocaleString()}`);
-        console.log(`剩余USDT: $${this.balance.toLocaleString()}`);
-        
-        // 🎯 步骤2：为每个网格设置买卖价格和分配ETH/USDT
-        const ethPerGrid = initialETHAmount / this.config.gridCount;
-        const usdtPerGrid = this.balance / this.config.gridCount;
-        
-        console.log(`\n📊 网格分配:`);
-        console.log(`每个网格ETH分配: ${ethPerGrid.toFixed(6)}ETH`);
-        console.log(`每个网格USDT分配: $${usdtPerGrid.toLocaleString()}`);
+        // 🎯 步骤1：直接分配资金到网格，不进行中心化买入
+        // 这样避免资金守恒问题，让每个网格独立持有资金
+        const totalFunds = this.config.initialCapital;
+        const fundsPerGrid = totalFunds / this.config.gridCount;
         
         // 找到基准价格在网格中的位置
         const baseGridIndex = this.findBaseGridIndex();
+        
+        // 重置balance为0，因为所有资金都分配到网格了
+        this.balance = 0;
+        this.totalETHHoldings = 0;
+        
+        console.log(`\n💰 资金分配:`);
+        console.log(`每个网格分配资金: $${fundsPerGrid.toLocaleString()}`);
         console.log(`基准价格对应网格索引: ${baseGridIndex}`);
         
         this.gridLevels.forEach((gridPrice, index) => {
             // 🎯 关键：确定每个网格的角色
             const isAboveBase = index > baseGridIndex;
             
-            const position = {
-                gridIndex: index,
-                gridPrice: gridPrice,
-                ethAmount: isAboveBase ? 0 : ethPerGrid,           // 基准价以上持有0ETH，等待买入
-                usdtAmount: isAboveBase ? usdtPerGrid : 0,         // 基准价以上持有USDT，等待买入
-                sellPrice: this.calculateSellPrice(gridPrice),     // 卖出价格
-                buyPrice: this.calculateBuyPrice(gridPrice),       // 买入价格
-                status: isAboveBase ? 'waiting_buy' : 'holding_eth', // 等待买入 vs 持有ETH
-                buyTime: isAboveBase ? null : Date.now(),
-                actualBuyPrice: isAboveBase ? null : this.basePrice
-            };
-            
-            this.positions.push(position);
+            let position;
             
             if (isAboveBase) {
-                console.log(`⬆️ 网格${index}(${gridPrice.toFixed(2)}): 持有$${usdtPerGrid.toFixed(2)}USDT, 等待买入@$${position.buyPrice.toFixed(2)}`);
+                // 基准价以上的网格：持有USDT等待买入
+                position = {
+                    gridIndex: index,
+                    gridPrice: gridPrice,
+                    ethAmount: 0,
+                    usdtAmount: fundsPerGrid,                       // 持有USDT等待买入
+                    sellPrice: this.calculateSellPrice(gridPrice),
+                    buyPrice: this.calculateBuyPrice(gridPrice), 
+                    status: 'waiting_buy',
+                    buyTime: null,
+                    actualBuyPrice: null
+                };
+                console.log(`⬆️ 网格${index}(${gridPrice.toFixed(2)}): 持有$${fundsPerGrid.toFixed(2)}USDT, 等待买入@$${position.buyPrice.toFixed(2)}`);
             } else {
-                console.log(`⬇️ 网格${index}(${gridPrice.toFixed(2)}): 持有${ethPerGrid.toFixed(6)}ETH, 等待卖出@$${position.sellPrice.toFixed(2)}`);
+                // 基准价以下的网格：用资金买入ETH
+                const ethAmount = (fundsPerGrid * this.config.leverage) / this.basePrice;
+                const fee = fundsPerGrid * this.config.feeRate;
+                
+                position = {
+                    gridIndex: index,
+                    gridPrice: gridPrice,
+                    ethAmount: ethAmount,                           // 持有ETH等待卖出
+                    usdtAmount: 0,
+                    sellPrice: this.calculateSellPrice(gridPrice),
+                    buyPrice: this.calculateBuyPrice(gridPrice),
+                    status: 'holding_eth',
+                    buyTime: Date.now(),
+                    actualBuyPrice: this.basePrice
+                };
+                console.log(`⬇️ 网格${index}(${gridPrice.toFixed(2)}): 持有${ethAmount.toFixed(6)}ETH, 等待卖出@$${position.sellPrice.toFixed(2)}`);
             }
+            
+            this.positions.push(position);
         });
         
         console.log(`\n🎯 网格交易初始化完成！`);
@@ -149,21 +154,21 @@ class GridStrategy {
     }
     
     /**
-     * 计算网格的卖出价格
+     * 计算网格的卖出价格 - 在更高的价格卖出
      */
     calculateSellPrice(gridPrice) {
         const gridSpacing = (this.gridLevels[1] - this.gridLevels[0]) || 
                            (this.basePrice * Math.abs(this.config.upperBound - this.config.lowerBound) / 100 / (this.config.gridCount - 1));
-        return gridPrice + gridSpacing;
+        return gridPrice + gridSpacing * 0.5; // 卖出价格是网格价格加半个间距
     }
     
     /**
-     * 计算网格的买入价格  
+     * 计算网格的买入价格 - 在更低的价格买入
      */
     calculateBuyPrice(gridPrice) {
         const gridSpacing = (this.gridLevels[1] - this.gridLevels[0]) || 
                            (this.basePrice * Math.abs(this.config.upperBound - this.config.lowerBound) / 100 / (this.config.gridCount - 1));
-        return gridPrice - gridSpacing;
+        return gridPrice - gridSpacing * 0.5; // 买入价格是网格价格减半个间距
     }
     
     /**
@@ -281,7 +286,7 @@ class GridStrategy {
         }
         
         // 🎯 买入触发：价格下跌到买入价位
-        const tolerance = position.buyPrice * 0.002; // 0.2%容差
+        const tolerance = position.buyPrice * 0.0001; // 0.01%容差，更严格
         const effectivePrice = position.buyPrice + tolerance;
         const shouldBuyResult = currentPrice <= effectivePrice;
         
@@ -307,7 +312,7 @@ class GridStrategy {
         }
         
         // 🎯 卖出触发：价格上涨到卖出价位
-        const tolerance = position.sellPrice * 0.002; // 0.2%容差
+        const tolerance = position.sellPrice * 0.0001; // 0.01%容差，更严格
         const effectivePrice = position.sellPrice - tolerance;
         const shouldSellResult = currentPrice >= effectivePrice;
         
