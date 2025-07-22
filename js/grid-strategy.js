@@ -467,10 +467,30 @@ class GridStrategy {
             return {};
         }
 
-        // 🔧 修复：使用用户设置的初始资金作为基准
+        // 🔧 修复：基于真实交易利润计算收益率
         const initialValue = this.config.initialCapital;
-        const finalValue = equity[equity.length - 1].totalValue;
-        const totalReturn = (finalValue - initialValue) / initialValue;
+        
+        // 计算真实利润：已实现交易利润 + 持仓浮盈
+        let realizedProfit = 0;
+        this.orders.forEach(order => {
+            if (order.type === 'sell' && order.profit !== undefined) {
+                realizedProfit += order.profit;
+            }
+        });
+        
+        let holdingProfit = 0;
+        const currentPrice = equity.length > 0 ? equity[equity.length - 1].price : this.basePrice;
+        this.positions.forEach(position => {
+            if (position.status === 'bought' && position.quantity > 0) {
+                const cost = position.quantity * position.buyPrice;
+                const currentVal = position.quantity * currentPrice;
+                holdingProfit += (currentVal - cost);
+            }
+        });
+        
+        const totalProfit = realizedProfit + holdingProfit;
+        const finalValue = initialValue + totalProfit;
+        const totalReturn = totalProfit / initialValue;
         
         // 计算年化收益率 - 使用简单线性年化公式
         const daysElapsed = (equity[equity.length - 1].timestamp - equity[0].timestamp) / (1000 * 60 * 60 * 24);
@@ -643,21 +663,16 @@ class GridStrategy {
         console.log(`持仓浮盈浮亏: $${holdingProfit.toLocaleString()}`);
         console.log(`已实现利润: $${gridTradingProfit.toLocaleString()}`);
         
-        // 3. 计算余额中未被分配到上述两项的部分
-        const calculatedSum = gridTradingProfit + holdingProfit;
-        const residual = totalProfit - calculatedSum;
-        
-        // 为了满足用户的要求，我们强制让等式成立：
-        // 如果有剩余差异，我们把它加到网格交易利润中
-        const adjustedGridProfit = gridTradingProfit + residual;
+        // 🔧 修复：使用真实的交易利润，不包含投入本金
+        const realTotalProfit = gridTradingProfit + holdingProfit;
         
         return {
-            gridTradingProfit: adjustedGridProfit,
-            gridTradingProfitPct: initialValue > 0 ? (adjustedGridProfit / initialValue) * 100 : 0,
+            gridTradingProfit: gridTradingProfit,
+            gridTradingProfitPct: initialValue > 0 ? (gridTradingProfit / initialValue) * 100 : 0,
             holdingProfit: holdingProfit,
             holdingProfitPct: positionCost > 0 ? (holdingProfit / positionCost) * 100 : 0,
-            totalProfit: totalProfit,
-            totalProfitPct: initialValue > 0 ? (totalProfit / initialValue) * 100 : 0,
+            totalProfit: realTotalProfit,
+            totalProfitPct: initialValue > 0 ? (realTotalProfit / initialValue) * 100 : 0,
             breakdown: {
                 initialValue: initialValue,
                 currentTotalValue: currentTotalValue,
