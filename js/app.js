@@ -250,36 +250,29 @@ class ETHGridBacktestApp {
     displayResults(results) {
         console.log('=== displayResults 开始 ===');
         console.log('接收到的results:', results);
-        console.log('results.metrics:', results.metrics);
-        console.log('results.profitBreakdown:', results.profitBreakdown);
-        console.log('results.dataInfo:', results.dataInfo);
-        console.log('results.dataInfo存在吗?', !!results.dataInfo);
-        if (results.dataInfo) {
-            console.log('priceRange:', results.dataInfo.priceRange);
-            console.log('priceRange存在吗?', !!results.dataInfo.priceRange);
-        } else {
-            console.error('❌ results.dataInfo不存在!');
-        }
-        
         
         // 显示利润分解
         this.displayProfitBreakdown(results.profitBreakdown);
         
-        // 计算并添加ETH现货收益率
+        // 计算并添加ETH现货收益率 - 从dataInfo获取价格数据
+        console.log('检查results.dataInfo:', results.dataInfo);
         if (results.dataInfo && results.dataInfo.priceRange) {
             const startPrice = results.dataInfo.priceRange.start;
             const endPrice = results.dataInfo.priceRange.end;
             const ethHoldingReturn = (endPrice - startPrice) / startPrice;
+            
+            // 手动添加到metrics中
             results.metrics.ethHoldingReturn = ethHoldingReturn;
             
-            // 调试输出
-            console.log('=== ETH现货收益率计算 ===');
+            console.log('=== ETH现货收益率计算成功 ===');
             console.log('起始价格:', startPrice);
             console.log('结束价格:', endPrice);
             console.log('ETH收益率:', ethHoldingReturn);
             console.log('ETH收益率(%):', (ethHoldingReturn * 100).toFixed(2) + '%');
         } else {
-            console.warn('未找到priceRange数据:', results.dataInfo);
+            console.error('❌ 无法计算ETH收益率，dataInfo缺失');
+            // 设置默认值以避免显示错误
+            results.metrics.ethHoldingReturn = 0;
         }
         
         // 显示关键指标
