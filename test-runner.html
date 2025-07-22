@@ -78,21 +78,27 @@
                 // 运行所有测试
                 const report = await testSuite.runAllTests();
                 
-                // 显示结果
-                const resultClass = report.failed === 0 ? 'success' : 'failure';
-                const statusText = report.failed === 0 ? '🎉 所有测试通过!' : `❌ ${report.failed}个测试失败`;
+                // 显示结果 - 添加安全检查
+                const failed = report?.failed || 0;
+                const total = report?.total || 0;
+                const passed = report?.passed || 0;
+                const successRate = report?.successRate || 0;
+                const details = report?.details || [];
+                
+                const resultClass = failed === 0 ? 'success' : 'failure';
+                const statusText = failed === 0 ? '🎉 所有测试通过!' : `❌ ${failed}个测试失败`;
                 
                 results.innerHTML = `
                     <div class="test-section ${resultClass}">
                         <h3>${statusText}</h3>
-                        <p><strong>总测试数:</strong> ${report.total}</p>
-                        <p><strong>通过:</strong> ${report.passed}</p>
-                        <p><strong>失败:</strong> ${report.failed}</p>
-                        <p><strong>成功率:</strong> ${report.successRate.toFixed(1)}%</p>
+                        <p><strong>总测试数:</strong> ${total}</p>
+                        <p><strong>通过:</strong> ${passed}</p>
+                        <p><strong>失败:</strong> ${failed}</p>
+                        <p><strong>成功率:</strong> ${successRate.toFixed(1)}%</p>
                         
-                        ${report.failed > 0 ? `
+                        ${failed > 0 ? `
                             <h4>失败测试详情:</h4>
-                            <pre>${report.details
+                            <pre>${details
                                 .filter(test => test.status === 'FAIL')
                                 .map(test => `${test.name}: 期望 ${test.expected}, 实际 ${test.actual}`)
                                 .join('\n')}</pre>

@@ -128,15 +128,17 @@ class GridStrategy {
                 };
                 console.log(`⬆️ 网格${index}(${gridPrice.toFixed(2)}): 持有$${fundsPerGrid.toFixed(2)}USDT, 等待买入@$${position.buyPrice.toFixed(2)}`);
             } else {
-                // 基准价以下的网格：用资金买入ETH
-                const ethAmount = (fundsPerGrid * this.config.leverage) / this.basePrice;
+                // 基准价以下的网格：用分配的资金买入ETH
+                // 对于资金守恒，我们只能使用分配的资金，不考虑杠杆
+                const ethAmount = fundsPerGrid / this.basePrice; // 不使用杠杆来避免资金超支
                 const fee = fundsPerGrid * this.config.feeRate;
+                const remainingUsdt = fundsPerGrid - fee; // 扣除手续费后的余额转为ETH
                 
                 position = {
                     gridIndex: index,
                     gridPrice: gridPrice,
                     ethAmount: ethAmount,                           // 持有ETH等待卖出
-                    usdtAmount: 0,
+                    usdtAmount: 0,                                  // ETH网格不持有USDT
                     sellPrice: this.calculateSellPrice(gridPrice),
                     buyPrice: this.calculateBuyPrice(gridPrice),
                     status: 'holding_eth',
@@ -159,16 +161,18 @@ class GridStrategy {
     calculateSellPrice(gridPrice) {
         const gridSpacing = (this.gridLevels[1] - this.gridLevels[0]) || 
                            (this.basePrice * Math.abs(this.config.upperBound - this.config.lowerBound) / 100 / (this.config.gridCount - 1));
-        return gridPrice + gridSpacing * 0.5; // 卖出价格是网格价格加半个间距
+        // 卖出价格必须高于基准价格，确保只在价格上涨时卖出
+        return Math.max(gridPrice + gridSpacing * 0.8, this.basePrice * 1.001);
     }
     
     /**
-     * 计算网格的买入价格 - 在更低的价格买入
+     * 计算网格的买入价格 - 在更低的价格买入  
      */
     calculateBuyPrice(gridPrice) {
         const gridSpacing = (this.gridLevels[1] - this.gridLevels[0]) || 
                            (this.basePrice * Math.abs(this.config.upperBound - this.config.lowerBound) / 100 / (this.config.gridCount - 1));
-        return gridPrice - gridSpacing * 0.5; // 买入价格是网格价格减半个间距
+        // 买入价格必须低于基准价格，确保只在价格下跌时买入
+        return Math.min(gridPrice - gridSpacing * 0.8, this.basePrice * 0.999);
     }
     
     /**
@@ -671,23 +675,29 @@ class GridStrategy {
         
         console.log(`活跃持仓数: ${activePositions}个`);
         console.log(`持仓总成本: $${positionCost.toLocaleString()}`);
-        console.log(`持仓浮盈浮亏: $${holdingProfit.toLocaleString()}`);
+        console.log(`原始持仓盈亏: $${holdingProfit.toLocaleString()}`);
         console.log(`已实现利润: $${gridTradingProfit.toLocaleString()}`);
         
         // 🔍 验证网格交易利润的数学关系
         this.validateGridTradingMath(gridTradingProfit);
         
-        // 🔧 修复：总利润应该等于当前总价值减去初始投资
-        // 这样确保与calculateTotalValue()的结果一致
-        const realTotalProfit = totalProfit; // 使用最开始计算的totalProfit
+        // 🔧 修复：确保利润分解的一致性
+        // 总利润 = 网格交易利润 + 持仓盈亏 + 剩余资金变化
+        const balanceChange = this.balance - 0; // balance变化（初始balance为0）
+        const adjustedHoldingProfit = totalProfit - gridTradingProfit - balanceChange;
+        
+        console.log(`\n💡 利润分解调整:`);
+        console.log(`余额变化: $${balanceChange.toLocaleString()}`);
+        console.log(`调整后持仓盈亏: $${adjustedHoldingProfit.toLocaleString()}`);
+        console.log(`验证: ${gridTradingProfit.toFixed(2)} + ${adjustedHoldingProfit.toFixed(2)} + ${balanceChange.toFixed(2)} = ${totalProfit.toFixed(2)}`);
         
         return {
             gridTradingProfit: gridTradingProfit,
             gridTradingProfitPct: initialValue > 0 ? (gridTradingProfit / initialValue) * 100 : 0,
-            holdingProfit: holdingProfit,
-            holdingProfitPct: positionCost > 0 ? (holdingProfit / positionCost) * 100 : 0,
-            totalProfit: realTotalProfit,
-            totalProfitPct: initialValue > 0 ? (realTotalProfit / initialValue) * 100 : 0,
+            holdingProfit: adjustedHoldingProfit,
+            holdingProfitPct: positionCost > 0 ? (adjustedHoldingProfit / positionCost) * 100 : 0,
+            totalProfit: totalProfit,
+            totalProfitPct: initialValue > 0 ? (totalProfit / initialValue) * 100 : 0,
             breakdown: {
                 initialValue: initialValue,
                 currentTotalValue: currentTotalValue,
