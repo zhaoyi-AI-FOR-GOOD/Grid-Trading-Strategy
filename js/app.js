@@ -253,7 +253,13 @@ class ETHGridBacktestApp {
         console.log('results.metrics:', results.metrics);
         console.log('results.profitBreakdown:', results.profitBreakdown);
         console.log('results.dataInfo:', results.dataInfo);
-        console.log('results.dataInfo.priceRange:', results.dataInfo?.priceRange);
+        console.log('results.dataInfo存在吗?', !!results.dataInfo);
+        if (results.dataInfo) {
+            console.log('priceRange:', results.dataInfo.priceRange);
+            console.log('priceRange存在吗?', !!results.dataInfo.priceRange);
+        } else {
+            console.error('❌ results.dataInfo不存在!');
+        }
         
         
         // 显示利润分解

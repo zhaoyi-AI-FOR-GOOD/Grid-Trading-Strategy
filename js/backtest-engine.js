@@ -72,6 +72,9 @@ class BacktestEngine {
             };
 
             console.log('回测完成!');
+            console.log('=== 检查completeResults.dataInfo ===');
+            console.log('dataInfo:', completeResults.dataInfo);
+            console.log('priceRange:', completeResults.dataInfo?.priceRange);
             return completeResults;
 
         } catch (error) {
