@@ -3,7 +3,7 @@
  * 🔧 已修复核心买入卖出逻辑错误
  */
 
-console.log('🚀 GridStrategy完整边界检查版本已加载 - v20250722-boundary-fix');
+console.log('🚀 GridStrategy纯参数驱动版本已加载 - v20250722-param-driven');
 
 class GridStrategy {
     constructor(config) {
@@ -116,7 +116,16 @@ class GridStrategy {
         console.log(`每个网格保证金: $${marginPerGrid.toLocaleString()}`);
         
         this.gridLevels.forEach((gridPrice, index) => {
-            const sellPrice = index < this.gridLevels.length - 1 ? this.gridLevels[index + 1] : null;
+            // 🎯 修复：每个网格都应该有卖出价格，包括最高网格
+            let sellPrice;
+            if (index < this.gridLevels.length - 1) {
+                // 普通网格：卖给下一个网格价格
+                sellPrice = this.gridLevels[index + 1];
+            } else {
+                // 最高网格：卖给网格上边界价格（用户设定的+10%）
+                const upperBound = this.basePrice * (1 + this.config.upperBound / 100);
+                sellPrice = upperBound;
+            }
             
             const position = {
                 gridIndex: index,
@@ -131,11 +140,7 @@ class GridStrategy {
             
             this.positions.push(position);
             
-            if (sellPrice) {
-                console.log(`✅ 网格${index}: ${ethPerGrid.toFixed(6)}ETH，网格价$${gridPrice.toFixed(2)}，挂卖单@$${sellPrice.toFixed(2)}`);
-            } else {
-                console.log(`✅ 网格${index}: ${ethPerGrid.toFixed(6)}ETH，网格价$${gridPrice.toFixed(2)}，最高网格持有`);
-            }
+            console.log(`✅ 网格${index}: ${ethPerGrid.toFixed(6)}ETH，网格价$${gridPrice.toFixed(2)}，挂卖单@$${sellPrice.toFixed(2)}`);
         });
         
         console.log(`\n🎯 网格交易初始化完成！`);
@@ -244,12 +249,7 @@ class GridStrategy {
             return false;
         }
         
-        // 🎯 边界检查：价格超出网格边界时不买入
-        const lowerBound = this.gridLevels[0];
-        const upperBound = this.gridLevels[this.gridLevels.length - 1];
-        if (currentPrice < lowerBound || currentPrice > upperBound) {
-            return false;
-        }
+        // 🎯 纯参数驱动：只按网格价格和挂单逻辑执行
         
         // 🎯 网格交易核心：价格回落到网格价位时补仓
         const tolerance = gridPrice * 0.002; // 0.2%容差
@@ -278,18 +278,10 @@ class GridStrategy {
         // 🎯 网格交易核心：使用预设的卖出价位
         const targetSellPrice = position.sellPrice;
         
-        // 如果没有卖出价位（最高网格），检查是否超出网格边界
+        // 🎯 所有网格都应该有sellPrice，如果没有则为配置错误
         if (!targetSellPrice) {
-            // 🎯 最高网格：当价格超出网格上边界时，应该全部卖出
-            const upperBound = this.gridLevels[this.gridLevels.length - 1];
-            const tolerance = upperBound * 0.002; // 0.2%容差
-            const shouldSellBeyondBoundary = currentPrice >= upperBound - tolerance;
-            
-            if (shouldSellBeyondBoundary) {
-                console.log(`✅ 最高网格强制卖出: 价格$${currentPrice.toFixed(2)} ≥ 网格上边界$${upperBound.toFixed(2)}`);
-            }
-            
-            return shouldSellBeyondBoundary;
+            console.error(`❌ 网格${position.gridIndex}没有设置卖出价格，这是配置错误！`);
+            return false;
         }
         
         // 价格触及卖出挂单价位时执行
