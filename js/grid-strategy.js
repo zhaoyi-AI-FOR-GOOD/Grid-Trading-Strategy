@@ -3,7 +3,7 @@
  * 🔧 已修复核心买入卖出逻辑错误
  */
 
-console.log('🚀 GridStrategy纯参数网格版本已加载 - v20250722-pure-grid');
+console.log('🚀 GridStrategy正确网格交易逻辑版本已加载 - v20250722-correct-grid-logic');
 
 class GridStrategy {
     constructor(config) {
@@ -82,66 +82,65 @@ class GridStrategy {
     }
 
     /**
-     * 初始化网格交易 - 买入初始多仓并设置挂单
-     * 🔧 核心：用初始资金买入ETH多仓，然后在订单簿上挂单
+     * 初始化网格交易 - 一次性买入ETH多仓，然后设置网格挂单
+     * 🔧 正确逻辑：先用基准价格买入ETH，再按网格价格设置挂单
      */
     initializePositions() {
-        const capitalPerGrid = this.config.initialCapital / this.config.gridCount;
-        let totalEthPurchased = 0;
-        let totalUsdtUsed = 0;
-        
         console.log(`\n🚀 初始化网格交易 - 基准价格: $${this.basePrice.toFixed(2)}`);
         console.log(`总资金: $${this.config.initialCapital.toLocaleString()}`);
-        console.log(`每个网格分配资金: $${capitalPerGrid.toLocaleString()}`);
+        console.log(`网格数量: ${this.config.gridCount}`);
+        console.log(`杠杆倍数: ${this.config.leverage}x`);
+        
+        // 🎯 步骤1：用全部资金按基准价格一次性买入ETH合约多仓
+        const totalMargin = this.config.initialCapital;
+        const totalInvestAmount = totalMargin * this.config.leverage;
+        const totalETHQuantity = totalInvestAmount / this.basePrice;
+        const totalFee = totalMargin * this.config.feeRate;
+        
+        // 扣除保证金和手续费
+        this.balance -= (totalMargin + totalFee);
+        
+        console.log(`\n💰 一次性买入ETH多仓:`);
+        console.log(`保证金: $${totalMargin.toLocaleString()}`);
+        console.log(`投资金额(含杠杆): $${totalInvestAmount.toLocaleString()}`);
+        console.log(`买入ETH数量: ${totalETHQuantity.toFixed(6)}ETH @ $${this.basePrice.toFixed(2)}`);
+        console.log(`手续费: $${totalFee.toLocaleString()}`);
+        console.log(`剩余余额: $${this.balance.toLocaleString()}`);
+        
+        // 🎯 步骤2：将ETH多仓按网格参数分配并设置挂单
+        const ethPerGrid = totalETHQuantity / this.config.gridCount;
+        const marginPerGrid = totalMargin / this.config.gridCount;
+        
+        console.log(`\n📊 网格分配:`);
+        console.log(`每个网格ETH数量: ${ethPerGrid.toFixed(6)}ETH`);
+        console.log(`每个网格保证金: $${marginPerGrid.toLocaleString()}`);
         
         this.gridLevels.forEach((gridPrice, index) => {
             const sellPrice = index < this.gridLevels.length - 1 ? this.gridLevels[index + 1] : null;
             
             const position = {
                 gridIndex: index,
-                gridPrice: gridPrice,          // 网格价格
-                sellPrice: sellPrice,          // 卖出价格
-                quantity: 0,
-                allocated: capitalPerGrid,
-                status: 'waiting',
-                buyPrice: null,
-                buyTime: null
+                gridPrice: gridPrice,           // 网格挂单价格
+                sellPrice: sellPrice,           // 卖出挂单价格
+                quantity: ethPerGrid,           // 分配的ETH数量
+                allocated: marginPerGrid,       // 分配的保证金
+                status: 'bought',               // 已买入状态
+                buyPrice: this.basePrice,       // 🔧 关键修复：使用基准价格作为买入价
+                buyTime: Date.now()
             };
             
-            // 🎯 关键：立即买入ETH多仓，按网格分配资金
-            const margin = capitalPerGrid;
-            const investAmount = margin * this.config.leverage;
-            const quantity = investAmount / gridPrice;
-            const fee = margin * this.config.feeRate;
-            
-            // 检查余额是否充足
-            if (this.balance >= margin + fee) {
-                // 买入ETH
-                position.quantity = quantity;
-                position.status = 'bought';
-                position.buyPrice = gridPrice;
-                position.buyTime = Date.now();
-                
-                // 扣除资金
-                this.balance -= (margin + fee);
-                totalEthPurchased += quantity;
-                totalUsdtUsed += (margin + fee);
-                
-                if (sellPrice) {
-                    console.log(`✅ 网格${index}: 买入${quantity.toFixed(6)}ETH@$${gridPrice.toFixed(2)}, 挂卖单@$${sellPrice.toFixed(2)}`);
-                } else {
-                    console.log(`✅ 网格${index}: 买入${quantity.toFixed(6)}ETH@$${gridPrice.toFixed(2)}, 最高网格持有`);
-                }
-            }
-            
             this.positions.push(position);
+            
+            if (sellPrice) {
+                console.log(`✅ 网格${index}: ${ethPerGrid.toFixed(6)}ETH，网格价$${gridPrice.toFixed(2)}，挂卖单@$${sellPrice.toFixed(2)}`);
+            } else {
+                console.log(`✅ 网格${index}: ${ethPerGrid.toFixed(6)}ETH，网格价$${gridPrice.toFixed(2)}，最高网格持有`);
+            }
         });
         
-        console.log(`\n📊 初始化完成:`);
-        console.log(`总购买ETH: ${totalEthPurchased.toFixed(6)}ETH`);
-        console.log(`已使用资金: $${totalUsdtUsed.toLocaleString()}`);
-        console.log(`剩余余额: $${this.balance.toLocaleString()}`);
-        console.log(`初始ETH价值: $${(totalEthPurchased * this.basePrice).toLocaleString()}`);
+        console.log(`\n🎯 网格交易初始化完成！`);
+        console.log(`所有ETH多仓已按基准价格$${this.basePrice.toFixed(2)}买入`);
+        console.log(`网格挂单已设置，等待价格触发`);
     }
 
     /**
