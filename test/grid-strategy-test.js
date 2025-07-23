@@ -45,7 +45,7 @@ class GridStrategyTestSuite {
         await this.testPerformanceAndConsistency();
         
         // 生成测试报告
-        this.generateTestReport();
+        return this.generateTestReport();
     }
 
     /**
