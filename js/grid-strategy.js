@@ -709,8 +709,8 @@ class GridStrategy {
                 calculationVerification: {
                     realizedProfit: gridTradingProfit,
                     holdingProfit: holdingProfit,
-                    totalProfit: realTotalProfit,
-                    isValid: Math.abs(realTotalProfit - (gridTradingProfit + holdingProfit)) < 0.01
+                    totalProfit: totalProfit,
+                    isValid: Math.abs(totalProfit - (gridTradingProfit + holdingProfit)) < 0.01
                 }
             }
         };
