@@ -14,7 +14,7 @@ class GridStrategy {
             gridCount: config.gridCount !== undefined ? config.gridCount : 100,
             gridType: config.gridType || 'arithmetic', // 'arithmetic' or 'geometric'
             leverage: config.leverage !== undefined ? config.leverage : 1,
-            feeRate: config.feeRate !== undefined ? config.feeRate : 0.0002 // 默认0.02%，支持用户自定义
+            feeRate: config.feeRate !== undefined ? config.feeRate : 0.00008 // 默认0.008%，支持用户自定义
         };
         
         this.basePrice = null; // 基准价格
