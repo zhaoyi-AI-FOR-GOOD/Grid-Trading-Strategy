@@ -7,6 +7,8 @@ console.log('🚀 GridStrategy数学验证版本已加载 - v20250722-math-valid
 
 class GridStrategy {
     constructor(config) {
+        console.log('🔍 GridStrategy构造函数调试 - 接收到的config:', config);
+        
         this.config = {
             initialCapital: config.initialCapital !== undefined ? config.initialCapital : 1000000,
             lowerBound: config.lowerBound !== undefined ? config.lowerBound : -30, // 价格下边界百分比
@@ -16,6 +18,8 @@ class GridStrategy {
             leverage: config.leverage !== undefined ? config.leverage : 1,
             feeRate: config.feeRate !== undefined ? config.feeRate : 0.00008 // 默认0.008%，支持用户自定义
         };
+        
+        console.log('🔍 GridStrategy构造函数调试 - 最终this.config:', this.config);
         
         this.basePrice = null; // 基准价格
         this.gridLevels = [];  // 网格价格水平

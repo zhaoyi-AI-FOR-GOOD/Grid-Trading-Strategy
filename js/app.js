@@ -219,7 +219,7 @@ class ETHGridBacktestApp {
      * @returns {Object} 配置对象
      */
     collectConfig() {
-        return {
+        const config = {
             initialCapital: parseFloat(document.getElementById('initialCapital').value),
             lowerBound: parseFloat(document.getElementById('lowerBound').value),
             upperBound: parseFloat(document.getElementById('upperBound').value),
@@ -230,6 +230,16 @@ class ETHGridBacktestApp {
             backtestPeriod: document.getElementById('backtestPeriod').value,
             feeRate: parseFloat(document.getElementById('feeRate').value) / 100 // 转换为小数
         };
+        
+        console.log('🔍 collectConfig调试 - 从界面获取的参数:');
+        console.log('lowerBound DOM值:', document.getElementById('lowerBound').value, '解析后:', config.lowerBound);
+        console.log('upperBound DOM值:', document.getElementById('upperBound').value, '解析后:', config.upperBound);
+        console.log('gridCount DOM值:', document.getElementById('gridCount').value, '解析后:', config.gridCount);
+        console.log('leverage DOM值:', document.getElementById('leverage').value, '解析后:', config.leverage);
+        console.log('feeRate DOM值:', document.getElementById('feeRate').value, '解析后:', config.feeRate);
+        console.log('完整config对象:', config);
+        
+        return config;
     }
 
     /**
