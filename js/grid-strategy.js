@@ -8,12 +8,12 @@ console.log('🚀 GridStrategy数学验证版本已加载 - v20250722-math-valid
 class GridStrategy {
     constructor(config) {
         this.config = {
-            initialCapital: config.initialCapital || 1000000,
-            lowerBound: config.lowerBound || -10, // 价格下边界百分比
-            upperBound: config.upperBound || 10,  // 价格上边界百分比
-            gridCount: config.gridCount || 25,
+            initialCapital: config.initialCapital !== undefined ? config.initialCapital : 1000000,
+            lowerBound: config.lowerBound !== undefined ? config.lowerBound : -30, // 价格下边界百分比
+            upperBound: config.upperBound !== undefined ? config.upperBound : 30,  // 价格上边界百分比
+            gridCount: config.gridCount !== undefined ? config.gridCount : 100,
             gridType: config.gridType || 'arithmetic', // 'arithmetic' or 'geometric'
-            leverage: config.leverage || 2,
+            leverage: config.leverage !== undefined ? config.leverage : 1,
             feeRate: config.feeRate !== undefined ? config.feeRate : 0.0002 // 默认0.02%，支持用户自定义
         };
         
